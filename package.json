@@ -1,18 +1,13 @@
 {
-  "type": "module",
+  "name": "believers-medi-bridge",
+  "version": "1.0.0",
+  "description": "Medi bridge project root",
   "scripts": {
-    "start": "node Backend/index.js",
-    "dev": "nodemon Backend/index.js"
+    "dev": "npm run dev --prefix Backend",
+    "start": "npm start --prefix Backend",
+    "test": "npm test --prefix Backend"
   },
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "cookie-parser": "^1.4.7",
-    "dotenv": "^17.4.0",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.3.3",
-    "morgan": "^1.10.1",
-    "nodemailer": "^8.0.4",
-    "nodemon": "^3.1.14"
-  }
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
