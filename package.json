@@ -1,4 +1,9 @@
 {
+  "type": "module",
+  "scripts": {
+    "start": "node Backend/index.js",
+    "dev": "nodemon Backend/index.js"
+  },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
