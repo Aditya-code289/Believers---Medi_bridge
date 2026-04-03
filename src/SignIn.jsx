@@ -22,13 +22,13 @@ function SignIn() {
           </div>
         </nav>
       </header>
-      
+
       <main className="relative flex-grow pt-24 pb-16 flex items-center justify-center overflow-hidden">
         {/* Background Decorative Element */}
         <div className="absolute inset-0 -z-10">
-          <img alt="High-key hospital corridor" className="w-full h-full object-cover opacity-10" data-alt="blurred high-key medical office interior with soft natural lighting and sterile white surfaces creating a professional calm atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKfOKe5fUESSBSR9y2oRL2dl3M2rXAdC0DHyPG5uuLUBMB552Qb2vouP-sh0d5rDsTk3UknV74tZ4m8DC5k9ie0l9J4L8rQEf2pk9S8tKPfRgR-k5oE8LNJwvHLVonzpZ1g0_eOgzaiLpmUa-kct4rzA_ttPkX3AHPEXEwhW7amjVtDQJoOJi0qSXLhPA6zmrLm4rIAQvfnRCPnVapPwOsbu2DSAalQi_5Jt61tPjO4UTwEWiytk4McvBmpnwRujexbVEWrSZ21wtE"/>
+          <img alt="High-key hospital corridor" className="w-full h-full object-cover opacity-10" data-alt="blurred high-key medical office interior with soft natural lighting and sterile white surfaces creating a professional calm atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKfOKe5fUESSBSR9y2oRL2dl3M2rXAdC0DHyPG5uuLUBMB552Qb2vouP-sh0d5rDsTk3UknV74tZ4m8DC5k9ie0l9J4L8rQEf2pk9S8tKPfRgR-k5oE8LNJwvHLVonzpZ1g0_eOgzaiLpmUa-kct4rzA_ttPkX3AHPEXEwhW7amjVtDQJoOJi0qSXLhPA6zmrLm4rIAQvfnRCPnVapPwOsbu2DSAalQi_5Jt61tPjO4UTwEWiytk4McvBmpnwRujexbVEWrSZ21wtE" />
         </div>
-        
+
         {/* Registration Card Container */}
         <div className="w-full max-w-2xl px-6 relative z-10">
           <div className="glass-panel ambient-shadow rounded-3xl p-8 md:p-12 border border-white/20">
@@ -87,22 +87,7 @@ function SignIn() {
                     <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="General Medical Center" type="text" />
                   </div>
                 </div>
-                {/* Specialization */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Specialization</label>
-                  <div className="relative">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">stethoscope</span>
-                    <select defaultValue="" className="w-full pl-12 pr-10 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none appearance-none">
-                      <option disabled value="">Select Field</option>
-                      <option value="Cardiology">Cardiology</option>
-                      <option value="Neurology">Neurology</option>
-                      <option value="Pediatrics">Pediatrics</option>
-                      <option value="General Medicine">General Medicine</option>
-                      <option value="Oncology">Oncology</option>
-                    </select>
-                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
-                  </div>
-                </div>
+
                 {/* Create Password */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Create Password</label>
@@ -111,16 +96,9 @@ function SignIn() {
                     <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="••••••••" type="password" />
                   </div>
                 </div>
-                {/* Confirm Password */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Confirm Password</label>
-                  <div className="relative">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">verified_user</span>
-                    <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="••••••••" type="password" />
-                  </div>
-                </div>
+
               </div>
-              
+
               {/* Terms & Conditions */}
               <div className="flex items-center gap-3 ml-2 mt-4">
                 <input className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-outline-variant bg-surface-container-lowest" id="terms" type="checkbox" />
@@ -128,15 +106,15 @@ function SignIn() {
                   I agree to the <a className="text-primary font-semibold" href="#">Terms of Service</a> and <a className="text-primary font-semibold" href="#">Privacy Policy</a>.
                 </label>
               </div>
-              
+
               {/* CTA Section */}
               <div className="pt-6 space-y-4">
-                <Link to="/login" className="block text-center w-full py-4 rounded-xl teal-gradient text-on-primary font-bold text-base shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] transition-all duration-200">
+                <Link to="/verify-otp" className="block text-center w-full py-4 rounded-xl teal-gradient text-on-primary font-bold text-base shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] transition-all duration-200">
                   Register
                 </Link>
                 <div className="text-center">
                   <p className="text-sm text-on-surface-variant">
-                    Already have an account? 
+                    Already have an account?
                     <Link className="text-primary font-bold hover:underline ml-1" to="/login">Sign In</Link>
                   </p>
                 </div>
@@ -145,13 +123,13 @@ function SignIn() {
           </div>
         </div>
       </main>
-      
+
       {/* Footer */}
       <footer className="w-full border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 mt-auto">
         <div className="flex flex-col md:flex-row justify-between items-center px-8 py-12 gap-4 max-w-7xl mx-auto">
           <div className="flex flex-col items-center md:items-start gap-2">
             <span className="font-bold text-teal-700 dark:text-teal-500">Medi Bridge</span>
-            <p className="text-sm font-['Inter'] text-slate-500 dark:text-slate-400">© 2024 Medi Bridge. Clinical Excellence.</p>
+            <p className="text-sm font-['Inter'] text-slate-500 dark:text-slate-400">© 2026 Medi Bridge. Clinical Excellence.</p>
           </div>
           <div className="flex gap-6">
             <a className="text-slate-500 hover:text-teal-600 transition-colors text-sm" href="#">Privacy Policy</a>
