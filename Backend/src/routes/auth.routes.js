@@ -26,4 +26,9 @@ authRouter.post('/login',authController.login);
 authRouter.get('/verify-email',authController.verifyEmail);
 
 
+
+
+
+
+
 export default authRouter
