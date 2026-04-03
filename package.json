@@ -1,0 +1,13 @@
+{
+  "name": "believers-medi-bridge",
+  "version": "1.0.0",
+  "description": "Medi bridge project root",
+  "scripts": {
+    "dev": "npm run dev --prefix Backend",
+    "start": "npm start --prefix Backend",
+    "test": "npm test --prefix Backend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
