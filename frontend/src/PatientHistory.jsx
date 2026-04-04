@@ -2,17 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
-// Helper: derive initials from username
-function getInitials(name = '') {
-  return name
-    .split(' ')
-    .map(w => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
+const API = 'http://localhost:9000';
 
-// Helper: classify blood pressure trend
+function getInitials(name = '') {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
 function bpTrend(bp = '') {
   const [sys] = bp.split('/').map(Number);
   if (!sys) return { label: '—', color: 'text-slate-400' };
@@ -20,16 +14,12 @@ function bpTrend(bp = '') {
   if (sys >= 130) return { label: 'Pre-Hypertension', color: 'text-amber-600' };
   return { label: 'Normal', color: 'text-teal-600' };
 }
-
-// Helper: classify sugar level trend
 function sugarTrend(val) {
   if (val == null) return { label: '—', color: 'text-slate-400' };
   if (val > 140) return { label: 'High', color: 'text-red-500' };
   if (val > 100) return { label: 'Moderate', color: 'text-amber-600' };
   return { label: 'Normal', color: 'text-teal-600' };
 }
-
-// Helper: classify weight trend (just display it)
 function weightTrend(val) {
   if (val == null) return { label: '—', color: 'text-slate-400' };
   if (val > 90) return { label: 'High', color: 'text-red-500' };
@@ -37,38 +27,490 @@ function weightTrend(val) {
   return { label: 'Healthy', color: 'text-teal-600' };
 }
 
+// ─── Custom Markdown Renderer ────────────────────────────────────────────────
+function renderMarkdown(text) {
+  if (!text) return null;
+  return text.split('\n').map((line, idx) => {
+    let isBullet = false;
+    let content = line;
+    if (line.trim().match(/^[-*]\s/)) {
+      isBullet = true;
+      content = line.replace(/^[-*]\s/, ''); // strip prefix
+    }
+
+    let isHeading = false;
+    if (content.trim().match(/^#+\s/)) {
+        isHeading = true;
+        content = content.replace(/^#+\s/, '');
+    }
+
+    const parts = content.split(/(\*\*.*?\*\*)/g);
+    const formattedContent = parts.map((part, pIdx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={pIdx} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+
+    if (isHeading) {
+        return <h4 key={idx} className="font-bold text-slate-800 text-base mt-4 mb-2">{formattedContent}</h4>;
+    }
+
+    if (isBullet) {
+      return (
+        <div key={idx} className="flex items-start gap-3 mb-2 ml-1">
+          <span className="text-indigo-400 mt-1 flex-shrink-0">•</span>
+          <span className="text-slate-700 leading-relaxed">{formattedContent}</span>
+        </div>
+      );
+    }
+    
+    // Normal paragraph
+    if (line.trim() === '') {
+        return <div key={idx} className="h-3"></div>;
+    }
+
+    return <p key={idx} className="text-slate-700 leading-relaxed mb-3">{formattedContent}</p>;
+  });
+}
+
+// ─── Diagnosis Panel Sub-component ───────────────────────────────────────────
+function DiagnosisPanel({ patient, onSaved }) {
+  const [diseaseName, setDiseaseName]     = useState('');
+  const [icdLoading, setIcdLoading]       = useState(false);
+  const [icdResults, setIcdResults]       = useState([]);
+  const [icdSelected, setIcdSelected]     = useState([]);
+  const [icdSaved, setIcdSaved]           = useState(false);
+  const [icdError, setIcdError]           = useState('');
+
+  const [medLoading, setMedLoading]       = useState(false);
+  const [medResults, setMedResults]       = useState(null);
+  const [medSelected, setMedSelected]     = useState([]);
+  const [activeTab, setActiveTab]         = useState('ayurveda');
+  const [medSaved, setMedSaved]           = useState(false);
+  const [medError, setMedError]           = useState('');
+
+  const [saving, setSaving]               = useState(false);
+
+  // Snapshot of what was actually saved — survives reset so summary stays visible
+  const [savedIcd, setSavedIcd]           = useState(patient.icdDiagnosis || []);
+  const [savedMed, setSavedMed]           = useState(patient.traditionalMedicine || []);
+  const [everSaved, setEverSaved]         = useState((patient.icdDiagnosis?.length > 0) || (patient.traditionalMedicine?.length > 0));
+  const [resetting, setResetting]         = useState(false);
+
+  // AI Summary states
+  const [aiSummary, setAiSummary]         = useState(patient.aiSummary || null);
+  const [aiGenerating, setAiGenerating]   = useState(false);
+  const [aiError, setAiError]             = useState('');
+
+  // searchDone = true once ICD results are loaded or we are viewing saved DB records
+  const searchDone = icdResults.length > 0 || icdLoading || everSaved;
+
+  async function handleIcdSearch() {
+    if (!diseaseName.trim()) return;
+    setIcdLoading(true);
+    setIcdResults([]);
+    setIcdSelected([]);
+    setIcdError('');
+    setIcdSaved(false);
+    setMedResults(null);
+    setMedSelected([]);
+    setMedSaved(false);
+    try {
+      const searchRes = await axios.post(`${API}/api/icd/search`, { search: diseaseName });
+      const raw = searchRes.data;
+      if (!raw || raw.length === 0) { setIcdError('No ICD-11 results found.'); return; }
+      const codesRes = await axios.post(`${API}/api/icd/codes`, raw);
+      setIcdResults(codesRes.data);
+    } catch (err) {
+      setIcdError(err?.response?.data?.message || 'Failed to search ICD-11. Is the backend running?');
+    } finally {
+      setIcdLoading(false);
+    }
+  }
+
+  function toggleIcd(item) {
+    setIcdSelected(prev =>
+      prev.find(x => x.code === item.code) ? prev.filter(x => x.code !== item.code) : [...prev, item]
+    );
+  }
+
+  async function handleSaveIcd() {
+    if (icdSelected.length === 0) return;
+    setSaving(true);
+    try {
+      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { icdDiagnosis: icdSelected });
+      setSavedIcd(icdSelected);   // snapshot for summary
+      setIcdSaved(true);
+      await fetchTraditionalMedicine();
+    } catch (err) { /* silent */ }
+    finally { setSaving(false); }
+  }
+
+  async function fetchTraditionalMedicine() {
+    setMedLoading(true);
+    setMedError('');
+    try {
+      const res = await axios.post(`${API}/api/medicine/search`, { disease_name: diseaseName });
+      setMedResults(res.data.results);
+    } catch { setMedError('Failed to fetch traditional medicine data.'); }
+    finally { setMedLoading(false); }
+  }
+
+  function toggleMed(system, item) {
+    const key = item.namaste_code || item.namec_code || item.icd11_code;
+    const entry = { system, namec_code: key, short_defination: item.short_defination || item.disease_name, long_defination: item.long_defination || item.long_definition };
+    setMedSelected(prev =>
+      prev.find(x => x.system === system && x.namec_code === key)
+        ? prev.filter(x => !(x.system === system && x.namec_code === key))
+        : [...prev, entry]
+    );
+  }
+
+  async function handleSaveMed() {
+    if (medSelected.length === 0) return;
+    setSaving(true);
+    try {
+      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { traditionalMedicine: medSelected });
+      setSavedMed(medSelected);   // snapshot for summary
+      setMedSaved(true);
+      setEverSaved(true);         // show summary
+      
+      // Fire AI summary generation in the background automatically
+      generateAISummary();
+
+      if (onSaved) onSaved();
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  }
+
+  async function generateAISummary() {
+    setAiGenerating(true);
+    setAiError('');
+    try {
+        const res = await axios.post(`${API}/api/pateint/generate-summary/${patient._id}`);
+        setAiSummary(res.data.aiSummary);
+        if (onSaved) onSaved(); // refresh parent to pick up AI summary
+    } catch (err) {
+        setAiError('Failed to generate AI summary.');
+    } finally {
+        setAiGenerating(false);
+    }
+  }
+
+  async function handleReset() {
+    setResetting(true);
+    try {
+      // Clear AI summary explicitly + icd & traditional medicine
+      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { icdDiagnosis: [], traditionalMedicine: [], aiSummary: "" });
+      setSavedIcd([]); setSavedMed([]); setEverSaved(false); setAiSummary(null);
+      setDiseaseName(''); setIcdResults([]); setIcdSelected([]); setIcdSaved(false);
+      setIcdError(''); setMedResults(null); setMedSelected([]); setMedSaved(false); setMedError('');
+      if (onSaved) onSaved();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  const TABS = ['ayurveda', 'unani', 'sidha'];
+
+  return (
+    <div className="bg-surface-container-lowest p-8 rounded-[1.5rem] shadow-sm space-y-6">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold text-on-background flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary">clinical_notes</span>
+          Final Diagnosis
+        </h3>
+        <button onClick={handleReset} disabled={resetting}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-slate-500 bg-slate-100 hover:bg-red-50 hover:text-red-500 transition-all border border-slate-200 disabled:opacity-50">
+          <span className={`material-symbols-outlined text-base ${resetting ? 'animate-spin' : ''}`}>
+            {resetting ? 'progress_activity' : 'refresh'}
+          </span>
+          Reset DB
+        </button>
+      </div>
+
+      {/* ── Search bar — ONLY visible before results load; hidden after ── */}
+      {!searchDone && (
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-2">Disease Name</label>
+          <div className="flex gap-3">
+            <input
+              className="flex-1 bg-surface-container-low border-none rounded-2xl focus:ring-2 focus:ring-primary/20 px-4 py-3 text-sm placeholder:text-slate-400"
+              placeholder="e.g. Jaundice, Diabetes, Asthma..."
+              value={diseaseName}
+              onChange={e => setDiseaseName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleIcdSearch()}
+            />
+            <button onClick={handleIcdSearch} disabled={icdLoading || !diseaseName.trim()}
+              className="px-6 py-3 bg-primary text-white rounded-2xl text-sm font-bold shadow-md shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+              <span className="material-symbols-outlined text-base">search</span>Search ICD-11
+            </button>
+          </div>
+          {icdError && <p className="text-sm text-red-500 mt-2">{icdError}</p>}
+        </div>
+      )}
+
+      {/* Loading spinner */}
+      {icdLoading && (
+        <div className="flex items-center gap-3 py-2 text-teal-500">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <span className="text-sm text-slate-500">Searching ICD-11 for "<b>{diseaseName}</b>"…</span>
+        </div>
+      )}
+
+      {/* ── ICD Results ── */}
+      {icdResults.length > 0 && (
+        <div>
+          {/* Searched-for tag */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <span className="material-symbols-outlined text-primary text-base">manage_search</span>
+            <span className="text-sm font-semibold text-slate-600">Results for:</span>
+            <span className="px-3 py-1 bg-primary/10 text-primary text-sm font-bold rounded-full">{diseaseName}</span>
+            <span className="text-xs text-slate-400 ml-auto">{icdResults.length} found · <b className="text-primary">{icdSelected.length}</b> selected</span>
+          </div>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {icdResults.map(item => {
+              const checked = !!icdSelected.find(x => x.code === item.code);
+              return (
+                <label key={item.code}
+                  className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer border transition-all ${checked ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleIcd(item)}
+                    className="mt-1 accent-teal-600 w-4 h-4 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                      <span className="px-2.5 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full">{item.code}</span>
+                      <p className="text-sm font-bold text-on-background">{item.name}</p>
+                    </div>
+                    {item.description && (
+                      <p className="text-sm text-slate-600 leading-relaxed mt-1">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          {!icdSaved && (
+            <div className="flex justify-end mt-4">
+              <button onClick={handleSaveIcd} disabled={saving || icdSelected.length === 0}
+                className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-full text-sm font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">
+                {saving ? <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                  : <span className="material-symbols-outlined text-base">save</span>}
+                Save ICD Diagnosis ({icdSelected.length})
+              </button>
+            </div>
+          )}
+          {icdSaved && (
+            <div className="mt-3 flex items-center gap-2 text-teal-600 text-sm font-semibold">
+              <span className="material-symbols-outlined text-base">check_circle</span>
+              ICD diagnosis saved to patient record.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Traditional Medicine loading ── */}
+      {medLoading && (
+        <div className="flex items-center gap-3 py-4 text-teal-500">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <span className="text-sm text-slate-500">Fetching Ayurveda · Unani · Sidha records…</span>
+        </div>
+      )}
+
+      {/* ── Traditional Medicine Results ── */}
+      {medResults && !medLoading && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-bold text-slate-600">Traditional Medicine</p>
+            <span className="text-xs text-slate-400"><b className="text-amber-600">{medSelected.length}</b> selected</span>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4 p-1 bg-slate-100 rounded-xl w-fit">
+            {TABS.map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${activeTab === tab ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-700'}`}>
+                {tab}
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${activeTab === tab ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'}`}>
+                  {(medResults[tab] || []).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {(medResults[activeTab] || []).length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-6">No {activeTab} records matched for "{diseaseName}".</p>
+            ) : (
+              (medResults[activeTab] || []).map((item, idx) => {
+                const key = item.namaste_code || item.namec_code || item.icd11_code;
+                const checked = !!medSelected.find(x => x.system === activeTab && x.namec_code === key);
+                return (
+                  <label key={item._id || idx}
+                    className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer border transition-all ${checked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleMed(activeTab, item)}
+                      className="mt-1 accent-amber-500 w-4 h-4 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">{key}</span>
+                        <p className="text-sm font-bold text-on-background">{item.short_defination || item.disease_name}</p>
+                      </div>
+                      {(item.long_defination || item.long_definition) && (
+                        <p className="text-sm text-slate-600 leading-relaxed mt-1">
+                          {item.long_defination || item.long_definition}
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          {!medSaved && (
+            <div className="flex justify-end mt-4">
+              <button onClick={handleSaveMed} disabled={saving || medSelected.length === 0}
+                className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-full text-sm font-bold shadow-lg shadow-amber-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">
+                {saving
+                  ? <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                  : <span className="material-symbols-outlined text-base">save</span>
+                }
+                Save Traditional Medicine ({medSelected.length})
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {medError && <p className="text-sm text-red-500">{medError}</p>}
+
+      {/* ── Saved Diagnosis Summary — persists even after Reset ── */}
+      {everSaved && (
+        <div className="space-y-5 pt-4 border-t-2 border-teal-100">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-teal-500 text-2xl">verified</span>
+            <p className="text-base font-bold text-teal-600">Diagnosis Complete &amp; Saved</p>
+          </div>
+
+          {/* ICD Summary */}
+          {savedIcd.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">ICD-11 Diagnoses</p>
+              <div className="space-y-2">
+                {savedIcd.map(item => (
+                  <div key={item.code} className="flex items-start gap-3 bg-primary/5 border border-primary/10 p-4 rounded-xl">
+                    <span className="px-2.5 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full flex-shrink-0 mt-0.5">{item.code}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-on-background">{item.name}</p>
+                      {item.description && <p className="text-sm text-slate-600 mt-1 leading-relaxed">{item.description}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Traditional Medicine Summary */}
+          {savedMed.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Traditional Medicine</p>
+              {['ayurveda', 'unani', 'sidha'].map(sys => {
+                const entries = savedMed.filter(x => x.system === sys);
+                if (entries.length === 0) return null;
+                return (
+                  <div key={sys} className="mb-4">
+                    <p className="text-xs font-bold text-amber-600 capitalize mb-2 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>{sys}
+                    </p>
+                    <div className="space-y-2">
+                      {entries.map((entry, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                          <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full flex-shrink-0 mt-0.5">{entry.namec_code}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-on-background">{entry.short_defination}</p>
+                            {entry.long_defination && <p className="text-sm text-slate-600 mt-1 leading-relaxed">{entry.long_defination}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* AI Clinical Summary UI */}
+          {aiGenerating && (
+            <div className="mt-6 p-5 border border-indigo-100 bg-indigo-50/50 rounded-2xl flex items-center gap-3">
+               <span className="material-symbols-outlined animate-spin text-indigo-500">progress_activity</span>
+               <p className="text-sm font-bold text-indigo-700">🤖 Generating AI Clinical Assessment...</p>
+            </div>
+          )}
+
+          {aiError && <p className="text-sm text-red-500">{aiError}</p>}
+
+          {aiSummary && !aiGenerating && (
+            <div className="mt-6 animate-fade-in">
+                <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                    LLM Clinical Assessment
+                </p>
+                <div className="p-6 bg-gradient-to-br from-indigo-50/50 to-white border border-indigo-100 rounded-2xl shadow-sm">
+                    {renderMarkdown(aiSummary)}
+                </div>
+            </div>
+          )}
+        </div>
+      )}
+
+
+    </div>
+  );
+}
+
+// ─── Main PatientHistory Component ───────────────────────────────────────────
 function PatientHistory() {
-  const [patients, setPatients] = useState([]);
+  const [patients, setPatients]       = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+
+  const fetchPatients = async (soft = false) => {
+    try {
+      if (!soft) setLoading(true);
+      setError(null);
+      const res = await axios.post(`${API}/api/pateint/get-pateint`);
+      setPatients(res.data);
+      // Only set to 0 if we are doing a hard reload and patients changed
+      // Otherwise we maintain the currently selected index
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to load patients. Is the backend running?');
+    } finally {
+      if (!soft) setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPatients = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await axios.post('http://localhost:3000/api/pateint/get-pateint');
-        setPatients(res.data);
-        setSelectedIndex(0);
-      } catch (err) {
-        console.error('Error fetching patients:', err);
-        setError(err?.response?.data?.message || 'Failed to load patients. Is the backend running?');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchPatients();
   }, []);
 
   const current = patients[selectedIndex] || null;
-  const bp = current ? bpTrend(current.bloodPressure) : {};
-  const sugar = current ? sugarTrend(current.sugarLevel) : {};
-  const weight = current ? weightTrend(current.weight) : {};
+  const bp      = current ? bpTrend(current.bloodPressure) : {};
+  const sugar   = current ? sugarTrend(current.sugarLevel) : {};
+  const weight  = current ? weightTrend(current.weight) : {};
 
   return (
     <div className="bg-background text-on-background antialiased overflow-hidden min-h-screen">
-      {/* Persistent SideNavBar */}
+
+      {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-full w-64 z-50 bg-slate-50 border-r border-slate-200/50 flex flex-col p-4 font-['Inter'] text-sm tracking-wide">
         <div className="mb-10 px-4">
           <h1 className="text-lg font-bold text-teal-700 tracking-tight">Medi Bridge</h1>
@@ -76,47 +518,39 @@ function PatientHistory() {
         </div>
         <nav className="flex-1 space-y-1">
           <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all duration-200" to="/dashboard">
-            <span className="material-symbols-outlined" data-icon="dashboard">dashboard</span>
-            Dashboard
+            <span className="material-symbols-outlined">dashboard</span> Dashboard
           </Link>
           <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all duration-200" to="/audit-history">
-            <span className="material-symbols-outlined" data-icon="fact_check" style={{ fontVariationSettings: "'FILL' 1" }}>fact_check</span>
-            Audit History
+            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>fact_check</span> Audit History
           </Link>
           <Link className="flex items-center gap-3 px-4 py-3 bg-white text-teal-600 rounded-xl font-semibold shadow-sm" to="/patient-history">
-            <span className="material-symbols-outlined" data-icon="history_edu" style={{ fontVariationSettings: "'FILL' 1" }}>history_edu</span>
-            Patient History
+            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>history_edu</span> Patient History
           </Link>
         </nav>
         <div className="mt-auto pt-4 border-t border-slate-200/50 space-y-1">
           <a className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all" href="#">
-            <span className="material-symbols-outlined" data-icon="settings">settings</span>
-            Settings
+            <span className="material-symbols-outlined">settings</span> Settings
           </a>
           <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all" to="/">
-            <span className="material-symbols-outlined" data-icon="logout">logout</span>
-            Logout
+            <span className="material-symbols-outlined">logout</span> Logout
           </Link>
         </div>
       </aside>
 
-      {/* Main Content Canvas */}
+      {/* Main */}
       <main className="ml-64 min-h-screen flex flex-col relative">
-        {/* TopAppBar */}
+        {/* TopBar */}
         <header className="fixed top-0 right-0 left-64 z-40 h-16 bg-white/80 backdrop-blur-md flex justify-between items-center px-8 shadow-[0_20px_40px_rgba(25,28,30,0.06)]">
           <div className="flex items-center gap-4">
             <div className="bg-surface-container-low px-4 py-2 rounded-full flex items-center gap-3">
-              <span className="material-symbols-outlined text-slate-400 text-lg" data-icon="search">search</span>
+              <span className="material-symbols-outlined text-slate-400 text-lg">search</span>
               <input className="bg-transparent border-none focus:ring-0 text-sm w-64 placeholder:text-slate-400" placeholder="Search records..." type="text" />
             </div>
           </div>
           <div className="flex items-center gap-6">
             <button className="relative text-slate-500 hover:text-teal-600 transition-colors">
-              <span className="material-symbols-outlined" data-icon="notifications">notifications</span>
+              <span className="material-symbols-outlined">notifications</span>
               <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full ring-2 ring-white"></span>
-            </button>
-            <button className="text-slate-500 hover:text-teal-600 transition-colors">
-              <span className="material-symbols-outlined" data-icon="help">help</span>
             </button>
             <div className="flex items-center gap-3 border-l border-slate-200 pl-6">
               <div className="text-right">
@@ -128,7 +562,8 @@ function PatientHistory() {
         </header>
 
         <div className="pt-16 flex h-[calc(100vh-64px)] overflow-hidden">
-          {/* Patient List Sidebar */}
+
+          {/* Patient list sidebar */}
           <section className="w-80 bg-surface-container-low flex flex-col overflow-hidden">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -138,60 +573,38 @@ function PatientHistory() {
                 </span>
               </div>
             </div>
-
             <div className="flex-1 overflow-y-auto no-scrollbar px-4 space-y-2 pb-6">
-              {/* Loading state */}
               {loading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <span className="material-symbols-outlined text-teal-400 text-3xl animate-spin">progress_activity</span>
                   <p className="text-xs text-slate-400">Loading patients…</p>
                 </div>
               )}
-
-              {/* Error state */}
               {!loading && error && (
                 <div className="bg-red-50 text-red-600 rounded-xl p-4 text-xs leading-relaxed">
-                  <p className="font-bold mb-1">Connection Error</p>
-                  <p>{error}</p>
+                  <p className="font-bold mb-1">Connection Error</p><p>{error}</p>
                 </div>
               )}
-
-              {/* Empty state */}
               {!loading && !error && patients.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
                   <span className="material-symbols-outlined text-3xl">person_off</span>
-                  <p className="text-xs">No patients found in the database.</p>
+                  <p className="text-xs">No patients found.</p>
                 </div>
               )}
-
-              {/* Patient list */}
               {!loading && !error && patients.map((patient, idx) => (
-                <div
-                  key={patient._id}
-                  onClick={() => setSelectedIndex(idx)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all group ${
-                    selectedIndex === idx
-                      ? 'bg-surface-container-lowest shadow-sm border border-primary/10'
-                      : 'bg-transparent hover:bg-white'
-                  }`}
-                >
+                <div key={patient._id} onClick={() => setSelectedIndex(idx)}
+                  className={`p-4 rounded-xl cursor-pointer transition-all group ${selectedIndex === idx ? 'bg-surface-container-lowest shadow-sm border border-primary/10' : 'bg-transparent hover:bg-white'}`}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                      selectedIndex === idx ? 'bg-primary-container/20 text-primary' : 'bg-slate-200 text-slate-500'
-                    }`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${selectedIndex === idx ? 'bg-primary-container/20 text-primary' : 'bg-slate-200 text-slate-500'}`}>
                       {getInitials(patient.username)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm truncate ${
-                        selectedIndex === idx ? 'font-bold text-on-background' : 'font-medium text-slate-600 group-hover:text-on-background'
-                      }`}>
+                      <p className={`text-sm truncate ${selectedIndex === idx ? 'font-bold text-on-background' : 'font-medium text-slate-600 group-hover:text-on-background'}`}>
                         {patient.username}
                       </p>
                       <p className="text-[10px] text-slate-500">{patient.age} yrs • {patient.gender}</p>
                     </div>
-                    {selectedIndex === idx && (
-                      <span className="material-symbols-outlined text-primary text-sm" data-icon="chevron_right">chevron_right</span>
-                    )}
+                    {selectedIndex === idx && <span className="material-symbols-outlined text-primary text-sm">chevron_right</span>}
                   </div>
                   {selectedIndex === idx && (
                     <div className="mt-3 pt-3 border-t border-slate-50 flex justify-between items-center">
@@ -204,15 +617,14 @@ function PatientHistory() {
             </div>
           </section>
 
-          {/* Detailed Selected View */}
+          {/* Detail view */}
           <section className="flex-1 overflow-y-auto no-scrollbar bg-background p-8">
             {!current && !loading && (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-4">
                 <span className="material-symbols-outlined text-5xl">person_search</span>
-                <p className="text-sm">{error ? 'Could not load patient data.' : 'No patient selected.'}</p>
+                <p className="text-sm">No patient selected.</p>
               </div>
             )}
-
             {loading && (
               <div className="flex flex-col items-center justify-center h-full gap-4 text-teal-500">
                 <span className="material-symbols-outlined text-5xl animate-spin">progress_activity</span>
@@ -222,250 +634,114 @@ function PatientHistory() {
 
             {!loading && current && (
               <div className="max-w-5xl mx-auto space-y-8">
-                {/* Section 1: Personal Profile Hero */}
+
+                {/* Profile Hero */}
                 <div className="relative bg-surface-container-lowest rounded-[2rem] p-8 shadow-[0_20px_40px_rgba(25,28,30,0.06)] flex items-end gap-8 overflow-hidden">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-primary-container/10 rounded-full -mr-24 -mt-24 blur-3xl"></div>
-                  {/* Avatar placeholder (no photo in schema) */}
-                  <div className="relative w-40 h-40 rounded-3xl overflow-hidden ring-4 ring-background shadow-lg bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center">
+                  <div className="relative w-40 h-40 rounded-3xl ring-4 ring-background shadow-lg bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center">
                     <span className="text-5xl font-bold text-teal-600">{getInitials(current.username)}</span>
                   </div>
                   <div className="relative flex-1 pb-2">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h2 className="text-4xl font-bold tracking-tight text-on-background leading-none">{current.username}</h2>
-                        <p className="text-slate-500 mt-2 font-medium">Patient ID: {current._id?.slice(-8).toUpperCase()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container hover:bg-slate-200 transition-colors">
-                          <span className="material-symbols-outlined text-slate-600" data-icon="edit">edit</span>
-                        </button>
-                        <button className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container hover:bg-slate-200 transition-colors">
-                          <span className="material-symbols-outlined text-slate-600" data-icon="share">share</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex gap-12">
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Gender</p>
-                        <p className="text-sm font-semibold text-on-background">{current.gender}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Age</p>
-                        <p className="text-sm font-semibold text-on-background">{current.age} Years</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Height</p>
-                        <p className="text-sm font-semibold text-on-background">{current.height} cm</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Weight</p>
-                        <p className="text-sm font-semibold text-on-background">{current.weight} kg</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Blood Group</p>
-                        <p className="text-sm font-semibold text-primary">{current.bloodGroup}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Phone</p>
-                        <p className="text-sm font-semibold text-on-background">{current.phoneNumber}</p>
-                      </div>
+                    <h2 className="text-4xl font-bold tracking-tight text-on-background leading-none mb-1">{current.username}</h2>
+                    <p className="text-slate-500 mb-4 font-medium">Patient ID: {current._id?.slice(-8).toUpperCase()}</p>
+                    <div className="flex gap-10">
+                      {[['Gender', current.gender], ['Age', `${current.age} yrs`], ['Height', `${current.height} cm`], ['Weight', `${current.weight} kg`], ['Blood', <span className="text-primary">{current.bloodGroup}</span>], ['Phone', current.phoneNumber]].map(([label, val]) => (
+                        <div key={label} className="space-y-1">
+                          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{label}</p>
+                          <p className="text-sm font-semibold text-on-background">{val}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Section 2: Biological Data Bento Grid */}
+                {/* Vitals grid */}
                 <div className="grid grid-cols-4 gap-6">
-                  {/* Weight */}
-                  <div className="bg-white p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between h-40">
-                    <div className="flex justify-between items-start">
-                      <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center text-teal-600">
-                        <span className="material-symbols-outlined" data-icon="monitor_weight">monitor_weight</span>
+                  {[
+                    { icon: 'monitor_weight', bg: 'teal', label: 'Weight', val: `${current.weight}`, unit: 'kg', trend: weight },
+                    { icon: 'blood_pressure', bg: 'rose', label: 'Blood Pressure', val: current.bloodPressure, unit: 'mmHg', trend: bp },
+                    { icon: 'glucose', bg: 'amber', label: 'Sugar Level', val: `${current.sugarLevel}`, unit: 'mg/dL', trend: sugar },
+                    { icon: 'favorite', bg: 'sky', label: 'Heart Rate', val: `${current.heartRate}`, unit: 'bpm', pulse: true },
+                  ].map(({ icon, bg, label, val, unit, trend, pulse }) => (
+                    <div key={label} className="bg-white p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between h-40">
+                      <div className="flex justify-between items-start">
+                        <div className={`w-10 h-10 rounded-full bg-${bg}-50 flex items-center justify-center text-${bg}-500`}>
+                          <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
+                        </div>
+                        {pulse
+                          ? <span className="material-symbols-outlined text-sky-500 animate-pulse text-xs">pulse_alert</span>
+                          : <span className={`text-[10px] font-bold ${trend?.color}`}>{trend?.label}</span>
+                        }
                       </div>
-                      <span className={`text-[10px] font-bold ${weight.color}`}>{weight.label}</span>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Weight</p>
-                      <p className="text-2xl font-bold text-on-background">{current.weight} <span className="text-xs font-medium text-slate-400">kg</span></p>
-                    </div>
-                  </div>
-
-                  {/* Blood Pressure */}
-                  <div className="bg-white p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between h-40">
-                    <div className="flex justify-between items-start">
-                      <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-rose-500">
-                        <span className="material-symbols-outlined" data-icon="blood_pressure" style={{ fontVariationSettings: "'FILL' 1" }}>blood_pressure</span>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">{label}</p>
+                        <p className="text-2xl font-bold text-on-background">{val} <span className="text-xs font-medium text-slate-400">{unit}</span></p>
                       </div>
-                      <span className={`text-[10px] font-bold ${bp.color}`}>{bp.label}</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Blood Pressure</p>
-                      <p className="text-2xl font-bold text-on-background">{current.bloodPressure} <span className="text-xs font-medium text-slate-400">mmHg</span></p>
-                    </div>
-                  </div>
-
-                  {/* Sugar Level */}
-                  <div className="bg-white p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between h-40">
-                    <div className="flex justify-between items-start">
-                      <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">
-                        <span className="material-symbols-outlined" data-icon="glucose">glucose</span>
-                      </div>
-                      <span className={`text-[10px] font-bold ${sugar.color}`}>{sugar.label}</span>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Sugar Level</p>
-                      <p className="text-2xl font-bold text-on-background">{current.sugarLevel} <span className="text-xs font-medium text-slate-400">mg/dL</span></p>
-                    </div>
-                  </div>
-
-                  {/* Heart Rate */}
-                  <div className="bg-white p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between h-40">
-                    <div className="flex justify-between items-start">
-                      <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center text-sky-500">
-                        <span className="material-symbols-outlined" data-icon="favorite" style={{ fontVariationSettings: "'FILL' 1" }}>favorite</span>
-                      </div>
-                      <span className="material-symbols-outlined text-sky-500 animate-pulse text-xs" data-icon="pulse">pulse_alert</span>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Heart Rate</p>
-                      <p className="text-2xl font-bold text-on-background">{current.heartRate} <span className="text-xs font-medium text-slate-400">bpm</span></p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
-                {/* Section 3: Clinical Info */}
+                {/* Diagnosis + Side panel */}
                 <div className="grid grid-cols-3 gap-6">
-                  {/* Left: Patient Details Panel */}
-                  <div className="col-span-2 space-y-6">
-                    <div className="bg-surface-container-lowest p-8 rounded-[1.5rem] shadow-sm">
-                      <h3 className="text-lg font-bold text-on-background mb-6 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary" data-icon="clinical_notes">clinical_notes</span>
-                        Clinical Summary
-                      </h3>
-                      <div className="space-y-6">
-                        <div className="bg-surface-container-low p-4 rounded-2xl">
-                          <p className="text-xs font-bold text-teal-600 uppercase tracking-wider mb-3">Patient Overview</p>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <p className="text-[10px] uppercase text-slate-400 font-bold">Blood Group</p>
-                              <p className="text-sm font-semibold text-primary">{current.bloodGroup}</p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] uppercase text-slate-400 font-bold">Contact</p>
-                              <p className="text-sm font-semibold text-on-background">{current.phoneNumber}</p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] uppercase text-slate-400 font-bold">Height</p>
-                              <p className="text-sm font-semibold text-on-background">{current.height} cm</p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] uppercase text-slate-400 font-bold">Weight</p>
-                              <p className="text-sm font-semibold text-on-background">{current.weight} kg</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 border-l-4 border-primary bg-slate-50 rounded-r-xl">
-                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Heart Rate Status</p>
-                            <p className="text-sm font-bold text-on-background">
-                              {current.heartRate >= 100 ? '⚠️ Tachycardia' : current.heartRate < 60 ? '⚠️ Bradycardia' : '✅ Normal Range'}
-                            </p>
-                          </div>
-                          <div className="p-4 border-l-4 border-tertiary-container bg-slate-50 rounded-r-xl">
-                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">BP Status</p>
-                            <p className="text-sm font-bold text-on-background">{bp.label}</p>
-                          </div>
-                        </div>
-                        <div className="space-y-3">
-                          <label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Doctor's Symptoms Observation</label>
-                          <textarea
-                            className="w-full bg-surface-container-low border-none rounded-2xl focus:ring-2 focus:ring-primary/20 p-4 text-sm placeholder:text-slate-400"
-                            placeholder="Enter patient symptoms and clinical observations..."
-                            rows="4"
-                          ></textarea>
-                        </div>
-                        <div className="flex justify-end pt-2">
-                          <button className="bg-primary text-white px-8 py-3 rounded-full font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform flex items-center gap-2">
-                            <span className="material-symbols-outlined text-sm" data-icon="save">save</span>
-                            Update Case File
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+
+                  {/* Main: Final Diagnosis Panel */}
+                  <div className="col-span-2">
+                    {/* key={current._id} resets the panel state when a new patient is selected */}
+                    <DiagnosisPanel key={current._id} patient={current} onSaved={() => fetchPatients(true)} />
                   </div>
 
-                  {/* Right: Vitals Quick Panel */}
+                  {/* Right: Vitals + Info */}
                   <div className="col-span-1 space-y-6">
                     <div className="bg-white p-6 rounded-[1.5rem] shadow-sm">
                       <h3 className="text-sm font-bold text-on-background mb-4 uppercase tracking-tight">Vitals at a Glance</h3>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between py-2 border-b border-slate-50">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-rose-400 text-base">favorite</span>
-                            <span className="text-xs text-slate-600">Heart Rate</span>
+                      <div className="space-y-3">
+                        {[['favorite', 'text-rose-400', 'Heart Rate', `${current.heartRate} bpm`],
+                          ['monitor_weight', 'text-teal-400', 'Weight', `${current.weight} kg`],
+                          ['glucose', 'text-amber-400', 'Sugar', `${current.sugarLevel} mg/dL`],
+                          ['blood_pressure', 'text-rose-500', 'Blood Pressure', current.bloodPressure],
+                        ].map(([icon, color, label, val]) => (
+                          <div key={label} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`material-symbols-outlined ${color} text-base`}>{icon}</span>
+                              <span className="text-xs text-slate-600">{label}</span>
+                            </div>
+                            <span className="text-sm font-bold text-on-background">{val}</span>
                           </div>
-                          <span className="text-sm font-bold text-on-background">{current.heartRate} bpm</span>
-                        </div>
-                        <div className="flex items-center justify-between py-2 border-b border-slate-50">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-teal-400 text-base">monitor_weight</span>
-                            <span className="text-xs text-slate-600">Weight</span>
-                          </div>
-                          <span className="text-sm font-bold text-on-background">{current.weight} kg</span>
-                        </div>
-                        <div className="flex items-center justify-between py-2 border-b border-slate-50">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-amber-400 text-base">glucose</span>
-                            <span className="text-xs text-slate-600">Sugar</span>
-                          </div>
-                          <span className="text-sm font-bold text-on-background">{current.sugarLevel} mg/dL</span>
-                        </div>
-                        <div className="flex items-center justify-between py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-rose-500 text-base">blood_pressure</span>
-                            <span className="text-xs text-slate-600">Blood Pressure</span>
-                          </div>
-                          <span className="text-sm font-bold text-on-background">{current.bloodPressure}</span>
-                        </div>
+                        ))}
                       </div>
-                      <button className="w-full mt-6 py-2 bg-surface-container-low text-primary text-[10px] font-bold rounded-full hover:bg-primary-container hover:text-white transition-all uppercase tracking-widest">
+                      <button className="w-full mt-5 py-2 bg-surface-container-low text-primary text-[10px] font-bold rounded-full hover:bg-primary-container hover:text-white transition-all uppercase tracking-widest">
                         View All Records
                       </button>
                     </div>
 
-                    <div className="bg-primary/5 p-6 rounded-[1.5rem] border border-primary/10">
-                      <h3 className="text-xs font-bold text-primary mb-3 uppercase tracking-tight">Patient Info</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 bg-white/50 p-3 rounded-xl">
+                    <div className="bg-primary/5 p-6 rounded-[1.5rem] border border-primary/10 space-y-3">
+                      <h3 className="text-xs font-bold text-primary uppercase tracking-tight">Patient Info</h3>
+                      {[
+                        { icon: 'person', label: current.username, sub: `${current.gender} • ${current.age} yrs` },
+                        { icon: 'bloodtype', label: current.bloodGroup, sub: 'Blood Group' },
+                      ].map(({ icon, label, sub }) => (
+                        <div key={sub} className="flex items-center gap-3 bg-white/50 p-3 rounded-xl">
                           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-primary shadow-sm">
-                            <span className="material-symbols-outlined text-lg" data-icon="person">person</span>
+                            <span className="material-symbols-outlined text-lg">{icon}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-bold text-on-background truncate">{current.username}</p>
-                            <p className="text-[9px] text-slate-500">{current.gender} • {current.age} yrs</p>
+                            <p className="text-[10px] font-bold text-on-background truncate">{label}</p>
+                            <p className="text-[9px] text-slate-500">{sub}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 bg-white/50 p-3 rounded-xl">
-                          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-primary shadow-sm">
-                            <span className="material-symbols-outlined text-lg" data-icon="bloodtype">bloodtype</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-bold text-on-background truncate">{current.bloodGroup}</p>
-                            <p className="text-[9px] text-slate-500">Blood Group</p>
-                          </div>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
+
               </div>
             )}
           </section>
         </div>
       </main>
 
-      {/* Floating Action Button */}
       <button className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50">
-        <span className="material-symbols-outlined text-2xl" data-icon="add">add</span>
+        <span className="material-symbols-outlined text-2xl">add</span>
       </button>
     </div>
   );

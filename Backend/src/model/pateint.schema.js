@@ -43,9 +43,34 @@ const patientSchema = new mongoose.Schema({
         type:String,
         required:[true , "blood pressure is required"],
     },
-})
+
+    // Selected ICD-11 diagnosis codes chosen by the doctor
+    icdDiagnosis: [
+        {
+            code:        { type: String },
+            name:        { type: String },
+            description: { type: String },
+        }
+    ],
+
+    // Selected traditional medicine records chosen by the doctor
+    traditionalMedicine: [
+        {
+            system:           { type: String, enum: ['ayurveda', 'unani', 'sidha'] },
+            namec_code:       { type: String },
+            short_defination: { type: String },
+            long_defination:  { type: String },
+        }
+    ],
+
+    // LLM generated assessment based on selected diagnoses
+    aiSummary: {
+        type: String,
+        default: null
+    }
+
+} , {timestamps:true})
 
 const patientModel = mongoose.model("patients",patientSchema);
 
 export default patientModel;
-
