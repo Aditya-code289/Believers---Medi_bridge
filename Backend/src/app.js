@@ -7,6 +7,8 @@ import cookieParser from 'cookie-parser';
 import icdRouter from "./routes/icd.routes.js"
 import medicineRouter from './routes/medicine.routes.js';
 
+import auditRouter from './routes/audit.routes.js';
+
 const app = express() ;
 
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
@@ -18,5 +20,6 @@ app.use('/api/auth' , authRouter);
 app.use('/api/pateint' , patientRouter);
 app.use('/api/icd',icdRouter);
 app.use('/api/medicine', medicineRouter); 
+app.use('/api/audit', auditRouter);
 
 export default app ;

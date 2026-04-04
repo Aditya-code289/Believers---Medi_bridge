@@ -1,95 +1,100 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
+
+const API = 'http://localhost:9000';
+
+function getInitials(name = '') {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+// ─── Custom Markdown Renderer (same one from PatientHistory) ────────────────
+function renderMarkdown(text) {
+  if (!text) return <p className="text-sm text-slate-500 italic">No final diagnosis logged yet.</p>;
+  return text.split('\n').map((line, idx) => {
+    let isBullet = false;
+    let content = line;
+    if (line.trim().match(/^[-*]\s/)) {
+      isBullet = true;
+      content = line.replace(/^[-*]\s/, ''); // strip prefix
+    }
+    let isHeading = false;
+    if (content.trim().match(/^#+\s/)) {
+        isHeading = true;
+        content = content.replace(/^#+\s/, '');
+    }
+    const parts = content.split(/(\*\*.*?\*\*)/g);
+    const formattedContent = parts.map((part, pIdx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={pIdx} className="font-bold text-slate-900 dark:text-slate-100">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+
+    if (isHeading) {
+        return <h4 key={idx} className="font-bold text-slate-800 dark:text-slate-200 text-base mt-4 mb-2">{formattedContent}</h4>;
+    }
+    if (isBullet) {
+      return (
+        <div key={idx} className="flex items-start gap-3 mb-2 ml-1">
+          <span className="text-teal-500 mt-1 flex-shrink-0">•</span>
+          <span className="text-slate-700 dark:text-slate-300 leading-relaxed">{formattedContent}</span>
+        </div>
+      );
+    }
+    if (line.trim() === '') return <div key={idx} className="h-3"></div>;
+    return <p key={idx} className="text-slate-700 dark:text-slate-300 leading-relaxed mb-3">{formattedContent}</p>;
+  });
+}
+
+function formatDate(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 
 function AuditHistory() {
-  const [selectedPatient, setSelectedPatient] = useState('MB-9281');
+  const [patients, setPatients] = useState([]);
+  const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
 
-  const patients = [
-    { id: 'MB-9281', name: 'Priya Sharma', initials: 'PS', age: 28, color: 'bg-primary-container/20 text-primary', lastVisit: 'Oct 24, 2023', active: true },
-    { id: 'MB-4412', name: 'Rahul Desai', initials: 'RD', age: 45, color: 'bg-slate-200 text-slate-500', active: false },
-    { id: 'MB-3019', name: 'Ananya Patel', initials: 'AP', age: 32, color: 'bg-slate-200 text-slate-500', active: false },
-    { id: 'MB-8821', name: 'Vikram Singh', initials: 'VS', age: 51, color: 'bg-slate-200 text-slate-500', active: false },
-    { id: 'MB-1129', name: 'Kavya Iyer', initials: 'KI', age: 24, color: 'bg-slate-200 text-slate-500', active: false },
-    { id: 'MB-5567', name: 'Rohan Verma', initials: 'RV', age: 39, color: 'bg-slate-200 text-slate-500', active: false },
-  ];
+  // Fetch Patients
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const res = await axios.post(`${API}/api/pateint/get-pateint`);
+        setPatients(res.data);
+        if (res.data.length > 0) setSelectedPatientId(res.data[0]._id);
+      } catch (err) {
+        console.error("Failed to load patients", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPatients();
+  }, []);
 
-  const auditData = {
-    'MB-9281': {
-      symptoms: '"Patient presents with wheezing, shortness of breath, and chest tightness over the past 48 hours. Reports exacerbation post-exposure to dust and pollution in New Delhi. No fever. Slight persistent dry cough during night time."',
-      systemOptions: [
-        { match: '92%', code: 'J45.909', desc: 'Unspecified asthma, uncomplicated' },
-        { match: '85%', code: 'J45.21', desc: 'Mild intermittent asthma with (acute) exacerbation', selected: true, note: '"Patient has documented history of intermittent asthma, presenting an acute phase reaction. J45.909 lacks specificity for exacerbation."' },
-        { match: '65%', code: 'J30.1', desc: 'Allergic rhinitis due to pollen' }
-      ],
-      events: [
-        { time: 'Today, 2:15 PM', title: 'Insurance Co. Revision', desc: 'Billing tier adjusted by Star Health for J45.21 code justification.', changes: 'tier_3 -> tier_4_acute', color: 'amber' },
-        { time: 'Today, 10:42 AM', title: 'Admin Metadata Update', desc: 'Clinical admin updated patient encounter timeframe to reflect actual admission.', changes: 'time_in: 09:15 -> 09:05', color: 'blue' },
-        { time: 'Today, 09:20 AM', title: 'Physician Finalized Record', desc: 'Dr. Vance signed off on clinical notes and diagnostic mapping.', changes: null, color: 'teal' }
-      ]
-    },
-    'MB-4412': {
-      symptoms: '"Patient reports sudden onset of severe chest pain, radiating to the left arm and jaw. Experiencing profuse sweating and nausea. History of hypertension and high cholesterol."',
-      systemOptions: [
-        { match: '96%', code: 'I21.9', desc: 'Acute myocardial infarction, unspecified', selected: true, note: '"Classic presentation of STEMI. Immediate intervention required."' },
-        { match: '70%', code: 'R07.9', desc: 'Chest pain, unspecified' },
-        { match: '50%', code: 'K21.9', desc: 'Gastro-esophageal reflux disease without esophagitis' }
-      ],
-      events: [
-        { time: 'Yesterday, 11:30 PM', title: 'Emergency Triage Trigger', desc: 'Patient flagged for immediate cardiac evaluation.', changes: 'status: waiting -> emergent', color: 'amber' },
-        { time: 'Yesterday, 11:45 PM', title: 'Provider Addendum', desc: 'Dr. Nair updated ECG results mapping to primary chart.', changes: 'ecg_status: pending -> uploaded', color: 'blue' }
-      ]
-    },
-    'MB-3019': {
-      symptoms: '"Patient complains of frequent urination, excessive thirst, and unexplained weight loss over the past 3 months. Fatigue is prominent."',
-      systemOptions: [
-        { match: '94%', code: 'E11.9', desc: 'Type 2 diabetes mellitus without complications', selected: true, note: '"HbA1c levels confirm diagnosis. Prescribing Metformin."' },
-        { match: '80%', code: 'E10.9', desc: 'Type 1 diabetes mellitus without complications' },
-        { match: '60%', code: 'E89.1', desc: 'Postprocedural hypoinsulinemia' }
-      ],
-      events: [
-        { time: 'Today, 09:00 AM', title: 'Lab Integration', desc: 'HbA1c results synced successfully from Metropolis Labs API.', changes: 'hba1c: null -> 8.2%', color: 'blue' },
-        { time: 'Today, 09:15 AM', title: 'Prescription Issued', desc: 'E-prescription for Metformin 500mg sent to Apollo Pharmacy.', changes: null, color: 'teal' }
-      ]
-    },
-    'MB-8821': {
-      symptoms: '"Patient presents with chronic severe lower back pain radiating down the right leg, worsened by sitting. Onset insidious over several months."',
-      systemOptions: [
-        { match: '88%', code: 'M54.41', desc: 'Lumbago with sciatica, right side' },
-        { match: '85%', code: 'M51.26', desc: 'Other intervertebral disc displacement, lumbar region', selected: true, note: '"MRI confirms L4-L5 disc herniation compressing the nerve root. M54.41 is just symptomatic description."' },
-        { match: '60%', code: 'M54.5', desc: 'Low back pain' }
-      ],
-      events: [
-        { time: 'Today, 03:00 PM', title: 'Radiology Update', desc: 'MRI Lumbar spine report attached to record.', changes: 'imaging: ordered -> resulted', color: 'blue' },
-        { time: 'Today, 04:30 PM', title: 'Physician Finalized Record', desc: 'Dr. Vance endorsed MRI findings and referred to physiotherapy.', changes: null, color: 'teal' }
-      ]
-    },
-    'MB-1129': {
-      symptoms: '"Patient presents with episodic migraines, localized to the right hemisphere, accompanied by photophobia and nausea. Episodes last 12-24 hours."',
-      systemOptions: [
-        { match: '95%', code: 'G43.009', desc: 'Migraine without aura, not intractable, without status migrainosus', selected: true, note: '"Patient presentation perfectly matches G43.009 classification."' },
-        { match: '80%', code: 'G43.109', desc: 'Migraine with aura, not intractable' },
-        { match: '70%', code: 'G44.209', desc: 'Tension-type headache, unspecified' }
-      ],
-      events: [
-        { time: 'Yesterday, 10:00 AM', title: 'Intake Assessment', desc: 'Nurse recorded initial history and vitals.', changes: 'status: scheduled -> checked_in', color: 'blue' },
-        { time: 'Yesterday, 10:45 AM', title: 'Physician Finalized Record', desc: 'Diagnosis registered, acute migraine abortive therapy prescribed.', changes: null, color: 'teal' }
-      ]
-    },
-    'MB-5567': {
-      symptoms: '"Patient experiencing high fever (102F), chills, and a productive cough with greenish sputum. Reports feeling increasingly fatigued for 5 days."',
-      systemOptions: [
-        { match: '92%', code: 'J18.9', desc: 'Pneumonia, unspecified organism', selected: true, note: '"Symptoms and lung auscultation strongly suggestive of bacterial pneumonia."' },
-        { match: '85%', code: 'J06.9', desc: 'Acute upper respiratory infection, unspecified' },
-        { match: '75%', code: 'J40', desc: 'Bronchitis, not specified as acute or chronic' }
-      ],
-      events: [
-        { time: 'Today, 08:30 AM', title: 'Vitals Alert', desc: 'System flagged elevated temperature for immediate review.', changes: 'fever_flag: false -> true', color: 'amber' },
-        { time: 'Today, 09:45 AM', title: 'Physician Finalized Record', desc: 'Treatment plan established, CBC and chest X-ray ordered.', changes: null, color: 'teal' }
-      ]
-    }
-  };
+  // Fetch Audit History
+  useEffect(() => {
+    if (!selectedPatientId) return;
+    const fetchAudit = async () => {
+      setLoadingEvents(true);
+      try {
+        const res = await axios.get(`${API}/api/audit/${selectedPatientId}`);
+        setAuditEvents(res.data.events || []);
+      } catch (err) {
+        console.error("Failed to load audit history", err);
+        setAuditEvents([]);
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+    fetchAudit();
+  }, [selectedPatientId]);
 
-  const currentAudit = auditData[selectedPatient] || auditData['MB-9281'];
+  const currentPatient = patients.find(p => p._id === selectedPatientId) || null;
 
   return (
     <div className="bg-background text-on-background antialiased overflow-hidden min-h-screen">
@@ -105,7 +110,6 @@ function AuditHistory() {
             <span className="material-symbols-outlined" data-icon="dashboard">dashboard</span>
             Dashboard
           </Link>
-          {/* Active State */}
           <Link className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 rounded-xl font-semibold shadow-sm"
             to="/audit-history">
             <span className="material-symbols-outlined" data-icon="fact_check" style={{ fontVariationSettings: "'FILL' 1" }}>fact_check</span>
@@ -159,37 +163,39 @@ function AuditHistory() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold tracking-tight text-on-surface dark:text-slate-200">Recent Audits</h2>
-                <span className="px-2 py-1 bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 text-[10px] font-bold rounded-full">6 TOTAL</span>
+                <span className="px-2 py-1 bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 text-[10px] font-bold rounded-full">{patients.length} TOTAL</span>
               </div>
             </div>
+            
             <div className="flex-1 overflow-y-auto no-scrollbar px-4 space-y-2 pb-6">
-              {patients.map((patient) => (
+              {loading ? (
+                 <div className="flex justify-center p-8"><span className="material-symbols-outlined animate-spin text-teal-500">progress_activity</span></div>
+              ) : patients.map((patient) => (
                 <div
-                  key={patient.id}
-                  onClick={() => setSelectedPatient(patient.id)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all group ${selectedPatient === patient.id
+                  key={patient._id}
+                  onClick={() => setSelectedPatientId(patient._id)}
+                  className={`p-4 rounded-xl cursor-pointer transition-all group ${selectedPatientId === patient._id
                     ? 'bg-white dark:bg-slate-800 shadow-sm border border-teal-500/20'
                     : 'bg-transparent hover:bg-white/60 dark:hover:bg-slate-800/50'
                     }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${selectedPatient === patient.id ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                      }`}>
-                      {patient.initials}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${selectedPatientId === patient._id ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                      {getInitials(patient.username)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-bold truncate ${selectedPatient === patient.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'}`}>
-                        {patient.name}
+                      <p className={`text-sm font-bold truncate ${selectedPatientId === patient._id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'}`}>
+                        {patient.username}
                       </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">ID: #{patient.id} • {patient.age}yo</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">ID: #{patient._id.slice(-6).toUpperCase()} • {patient.age} yrs</p>
                     </div>
-                    {selectedPatient === patient.id && (
+                    {selectedPatientId === patient._id && (
                       <span className="material-symbols-outlined text-teal-500 text-sm" data-icon="chevron_right">chevron_right</span>
                     )}
                   </div>
-                  {patient.active && selectedPatient === patient.id && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                      <span className="text-[10px] text-slate-400">Last visited: {patient.lastVisit}</span>
+                  {selectedPatientId === patient._id && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] text-slate-400">
+                      <span>Updated: {formatDate(patient.updatedAt)}</span>
                       <span className="w-2 h-2 rounded-full bg-teal-500"></span>
                     </div>
                   )}
@@ -200,7 +206,13 @@ function AuditHistory() {
 
           {/* Detailed Audit View */}
           <section className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/50 dark:bg-slate-950 p-8">
-            <div className="max-w-5xl mx-auto space-y-8">
+            {!currentPatient ? (
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-4">
+                 <span className="material-symbols-outlined text-5xl">person_search</span>
+                 <p className="text-sm">Select a patient to view audit history.</p>
+              </div>
+            ) : (
+            <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
               {/* Audit Header */}
               <div className="flex items-center justify-between">
                 <div>
@@ -208,124 +220,69 @@ function AuditHistory() {
                     <span className="material-symbols-outlined text-teal-600 dark:text-teal-400">gavel</span>
                     Clinical Audit Trail
                   </h2>
-                  <p className="text-sm font-medium text-slate-500 mt-1">Patient ID: {selectedPatient} — Showing complete historical and metadata modifications.</p>
+                  <p className="text-sm font-medium text-slate-500 mt-1">Patient ID: {currentPatient._id} — Last Updated: {formatDate(currentPatient.updatedAt)}</p>
                 </div>
-                <button className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-2 shadow-sm">
-                  <span className="material-symbols-outlined text-sm">download</span>
-                  Export PDF
-                </button>
               </div>
 
-              {/* Alert: Manual Override Detected */}
-
-              {/* Alert: Manual Override Detected */}
-              {currentAudit.systemOptions.find(o => o.selected && o.match !== currentAudit.systemOptions[0].match) && (
-                <div className="bg-error-container/20 border-l-4 border-error p-5 rounded-r-2xl flex gap-4 items-start shadow-sm mix-blend-multiply dark:mix-blend-normal dark:bg-red-900/10">
-                  <span className="material-symbols-outlined text-error mt-0.5">warning</span>
-                  <div>
-                    <h3 className="text-sm font-bold text-error">Manual Override Detected</h3>
-                    <p className="text-xs text-error/80 mt-1 font-medium leading-relaxed">
-                      The attending physician manually selected a diagnosis code that differed from the top recommended Clinical Option. This action was logged to ensure preventative mistreatment tracking and compliance.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="space-y-8">
                 {/* Left side: Clinical Interactions */}
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Doctor Prompts */}
+                <div className="space-y-6">
+                  
+                  {/* Final Diagnosis add by physician */}
                   <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
                     <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-4 flex items-center gap-2">
                       <span className="material-symbols-outlined text-primary text-sm">record_voice_over</span>
-                      Symptoms Prompted by Physician
+                      Final Diagnosis added by Physician
                     </h3>
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium italic border border-slate-100 dark:border-slate-800">
-                      {currentAudit.symptoms}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl text-sm border border-slate-100 dark:border-slate-800 font-medium italic">
+                      {currentPatient.searchQuery ? `"${currentPatient.searchQuery}"` : <span className="text-slate-400 not-italic">No search query recorded yet.</span>}
                     </div>
                   </div>
 
-                  {/* Generated Options vs Selected */}
+                  {/* Doctor Selected Options */}
                   <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
                     <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-4 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-teal-600 dark:text-teal-400 text-sm">list_alt</span>
-                      System Generated Options
+                      <span className="material-symbols-outlined text-teal-600 dark:text-teal-400 text-sm">done_all</span>
+                      Doctor Selected Options
                     </h3>
+                    
                     <div className="space-y-4">
-                      {/* Option 1 */}
-                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 opacity-60">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] font-bold rounded text-slate-600 dark:text-slate-400">92% Match</span>
-                          <span className="text-[10px] font-bold text-slate-400">J45.909</span>
-                        </div>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Unspecified asthma, uncomplicated</p>
-                      </div>
-
-                      {/* Option 2 (Selected but Overridden manually) */}
-                      <div className="border-2 border-teal-500 bg-teal-50/30 dark:bg-teal-900/10 rounded-xl p-4 relative shadow-sm">
-                        <div className="absolute -top-3 -right-3 bg-teal-500 text-white w-8 h-8 rounded-full flex items-center justify-center shadow-md">
-                          <span className="material-symbols-outlined text-sm">check</span>
-                        </div>
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="px-2 py-1 bg-teal-100 dark:bg-teal-900/50 text-[10px] font-bold rounded text-teal-800 dark:text-teal-300">Physician Override Selected</span>
-                          <span className="text-[10px] font-bold text-teal-700 dark:text-teal-400 tracking-wider">J45.21</span>
-                        </div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">Mild intermittent asthma with (acute) exacerbation</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-                          <strong>Physician note:</strong> "Patient has documented history of intermittent asthma, presenting an acute phase reaction. J45.909 lacks specificity for exacerbation."
-                        </p>
-                      </div>
-
-                      {/* Option 3 */}
-                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 opacity-40">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] font-bold rounded text-slate-600 dark:text-slate-400">65% Match</span>
-                          <span className="text-[10px] font-bold text-slate-400">J30.1</span>
-                        </div>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Allergic rhinitis due to pollen</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right side: Admin & Insurance Minute Changes */}
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-slate-800 h-full">
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-6 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-amber-500 text-sm">manage_search</span>
-                      Admin & Provider Modifications
-                    </h3>
-
-
-                    <div className="relative border-l-2 border-slate-100 dark:border-slate-800 ml-3 space-y-8 pb-4">
-                      {currentAudit.events.map((ev, i) => (
-                        <div key={i} className="relative pl-6">
-                          <span className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full flex items-center justify-center ring-4 ring-white dark:ring-slate-900 ${ev.color === 'amber' ? 'bg-amber-100 dark:bg-amber-900/50' :
-                            ev.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/50' :
-                              'bg-teal-100 dark:bg-teal-900/50'}`}>
-                            <span className={`w-2 h-2 rounded-full ${ev.color === 'amber' ? 'bg-amber-500' :
-                              ev.color === 'blue' ? 'bg-blue-500' :
-                                'bg-teal-500'
-                              }`}></span>
-                          </span>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{ev.time}</span>
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{ev.title}</p>
-                            <p className="text-xs text-slate-500">{ev.desc}</p>
-                            {ev.changes && (
-                              <div className="mt-2 bg-slate-50 dark:bg-slate-800 p-2 rounded text-[10px] font-mono text-slate-600 dark:text-slate-400">
-                                {ev.changes}
-                              </div>
-                            )}
+                      {/* ICD Diagnosis List */}
+                      {(!currentPatient.icdDiagnosis?.length && !currentPatient.traditionalMedicine?.length) && (
+                         <p className="text-sm text-slate-500 italic">No diagnosis has been saved yet.</p>
+                      )}
+                      
+                      {currentPatient.icdDiagnosis?.map((icd, idx) => (
+                        <div key={idx} className="border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800/50 rounded-xl p-4 relative shadow-sm">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-900 text-[10px] font-bold rounded text-slate-700 dark:text-slate-300">ICD-11 CODE</span>
+                            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 tracking-wider bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded">{icd.code}</span>
                           </div>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white leading-relaxed">{icd.name}</p>
                         </div>
                       ))}
+
+                      {/* Traditional Medicine List */}
+                      {currentPatient.traditionalMedicine?.map((med, idx) => (
+                        <div key={`med-${idx}`} className="border-2 border-indigo-50 dark:border-indigo-900/30 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-xl p-4 relative shadow-sm">
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-[10px] font-bold rounded text-indigo-800 dark:text-indigo-300 uppercase tracking-wider">{med.system} THERAPY</span>
+                            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded">{med.namec_code}</span>
+                          </div>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white leading-relaxed">{med.short_defination}</p>
+                          {med.long_defination && (
+                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 line-clamp-2">{med.long_defination}</p>
+                          )}
+                        </div>
+                      ))}
+
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
+            )}
           </section>
         </div>
       </main>

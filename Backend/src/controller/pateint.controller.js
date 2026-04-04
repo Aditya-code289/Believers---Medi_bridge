@@ -1,6 +1,19 @@
 import patientModel from "../model/pateint.schema.js";
+import auditModel from "../model/audit.schema.js";
 
-export async function get_pateint(req,res){
+async function logAuditEvent(patientId, title, desc, color = 'teal', changes = null) {
+    try {
+        await auditModel.findOneAndUpdate(
+            { patientId },
+            { $push: { events: { title, desc, color, changes } } },
+            { upsert: true, new: true }
+        );
+    } catch (e) {
+        console.error("Failed to log audit event:", e);
+    }
+}
+
+export async function get_pateint(req, res) {
     try {
         const patients = await patientModel.find({});
         res.status(200).json(patients);
@@ -15,7 +28,7 @@ export async function get_pateint(req,res){
 export async function updateDiagnosis(req, res) {
     try {
         const { id } = req.params;
-        const { icdDiagnosis, traditionalMedicine } = req.body;
+        const { icdDiagnosis, traditionalMedicine, searchQuery } = req.body;
 
         const updateFields = {};
 
@@ -24,6 +37,9 @@ export async function updateDiagnosis(req, res) {
         }
         if (traditionalMedicine !== undefined) {
             updateFields.traditionalMedicine = traditionalMedicine;
+        }
+        if (searchQuery !== undefined) {
+            updateFields.searchQuery = searchQuery;
         }
         if (req.body.aiSummary !== undefined) {
             updateFields.aiSummary = req.body.aiSummary;
@@ -42,6 +58,27 @@ export async function updateDiagnosis(req, res) {
         if (!updated) {
             return res.status(404).json({ message: "Patient not found" });
         }
+
+        // Log the audit event
+        let auditTitle = "Diagnosis Updated";
+        let auditDesc = "Patient clinical options were modified.";
+        let color = "blue";
+
+        if (icdDiagnosis && traditionalMedicine) {
+            auditTitle = "Physician Finalized Record";
+            auditDesc = "Dr. Vance signed off on clinical notes and diagnostic mapping.";
+            color = "teal";
+        } else if (searchQuery) {
+            auditTitle = "Physicist Started Search";
+            auditDesc = `Search triggered for: "${searchQuery}"`;
+            color = "teal";
+        } else if (req.body.aiSummary === "") {
+            auditTitle = "Record Reset";
+            auditDesc = "Diagnosis and AI summary were cleared from the patient record.";
+            color = "amber";
+        }
+
+        await logAuditEvent(id, auditTitle, auditDesc, color);
 
         return res.status(200).json({
             message: "Diagnosis updated successfully",
@@ -135,6 +172,9 @@ STRICT RULES — you MUST follow all of these without exception:
         // Save to patient
         patient.aiSummary = aiSummary;
         await patient.save();
+
+        // Log that AI Summary was generated
+        await logAuditEvent(id, "LLM Assessment Generated", "Automated clinical assessment was generated and appended to the patient record.", "blue");
 
         return res.status(200).json({ message: "Summary generated", aiSummary });
 

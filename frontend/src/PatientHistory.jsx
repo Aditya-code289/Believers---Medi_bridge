@@ -171,7 +171,7 @@ function DiagnosisPanel({ patient, onSaved }) {
     if (medSelected.length === 0) return;
     setSaving(true);
     try {
-      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { traditionalMedicine: medSelected });
+      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { traditionalMedicine: medSelected, searchQuery: diseaseName });
       setSavedMed(medSelected);   // snapshot for summary
       setMedSaved(true);
       setEverSaved(true);         // show summary

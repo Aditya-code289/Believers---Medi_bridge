@@ -67,6 +67,12 @@ const patientSchema = new mongoose.Schema({
     aiSummary: {
         type: String,
         default: null
+    },
+
+    // What the doctor typed in the search bar
+    searchQuery: {
+        type: String,
+        default: null
     }
 
 } , {timestamps:true})
