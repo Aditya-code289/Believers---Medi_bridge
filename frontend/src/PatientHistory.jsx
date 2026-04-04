@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
-const API = 'http://localhost:9000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
 
 function getInitials(name = '') {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -75,7 +75,7 @@ function renderMarkdown(text) {
 }
 
 // ─── Diagnosis Panel Sub-component ───────────────────────────────────────────
-function DiagnosisPanel({ patient, onSaved }) {
+function DiagnosisPanel({ patient, onSaved, userData }) {
   const [diseaseName, setDiseaseName]     = useState('');
   const [icdLoading, setIcdLoading]       = useState(false);
   const [icdResults, setIcdResults]       = useState([]);
@@ -139,7 +139,7 @@ function DiagnosisPanel({ patient, onSaved }) {
     if (icdSelected.length === 0) return;
     setSaving(true);
     try {
-      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { icdDiagnosis: icdSelected });
+      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { icdDiagnosis: icdSelected, doctorName: userData?.username || 'Attending Physician' });
       setSavedIcd(icdSelected);   // snapshot for summary
       setIcdSaved(true);
       await fetchTraditionalMedicine();
@@ -170,7 +170,7 @@ function DiagnosisPanel({ patient, onSaved }) {
   async function handleSaveMed() {
     setSaving(true);
     try {
-      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { traditionalMedicine: medSelected, searchQuery: diseaseName });
+      await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { traditionalMedicine: medSelected, searchQuery: diseaseName, doctorName: userData?.username || 'Attending Physician' });
       setSavedMed(medSelected);   // snapshot for summary
       setMedSaved(true);
       setEverSaved(true);         // show summary
@@ -486,6 +486,7 @@ function PatientHistory() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [patientsListOpen, setPatientsListOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [userData, setUserData] = useState(null);
 
   const fetchPatients = async (soft = false) => {
     try {
@@ -504,6 +505,13 @@ function PatientHistory() {
 
   useEffect(() => {
     fetchPatients();
+    // Fetch logged in doctor
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+        axios.get(`${API}/api/auth/get-me`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }).then(res => setUserData(res.data)).catch(() => {});
+    }
   }, []);
 
   const handleDownloadPdf = async (id, username) => {
@@ -589,12 +597,7 @@ function PatientHistory() {
               <span className="material-symbols-outlined">notifications</span>
               <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full ring-2 ring-white"></span>
             </button>
-            <div className="flex items-center gap-3 border-l border-slate-200 pl-6">
-              <div className="text-right">
-                <p className="text-xs font-bold text-on-background">Dr. Julian Vance</p>
-                <p className="text-[10px] text-slate-500">Chief of Cardiology</p>
-              </div>
-            </div>
+
           </div>
         </header>
 
@@ -739,7 +742,7 @@ function PatientHistory() {
                   {/* Main: Final Diagnosis Panel */}
                   <div className="col-span-2">
                     {/* key={current._id} resets the panel state when a new patient is selected */}
-                    <DiagnosisPanel key={current._id} patient={current} onSaved={() => fetchPatients(true)} />
+                    <DiagnosisPanel key={current._id} patient={current} onSaved={() => fetchPatients(true)} userData={userData} />
                   </div>
 
                   {/* Right: Vitals + Info */}
@@ -791,10 +794,6 @@ function PatientHistory() {
           </section>
         </div>
       </main>
-
-      <button className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50">
-        <span className="material-symbols-outlined text-2xl">add</span>
-      </button>
     </div>
   );
 }

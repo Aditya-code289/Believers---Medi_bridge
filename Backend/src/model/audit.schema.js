@@ -13,6 +13,7 @@ const auditSchema = new mongoose.Schema({
             desc: { type: String, required: true },
             changes: { type: String }, // e.g., 'tier_3 -> tier_4'
             color: { type: String, default: 'teal' }, // teal, blue, amber
+            author: { type: String, default: 'System' },
             timestamp: { type: Date, default: Date.now }
         }
     ]

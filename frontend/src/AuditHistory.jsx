@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
-const API = 'http://localhost:9000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
 
 function getInitials(name = '') {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -147,13 +147,7 @@ function AuditHistory() {
             <button className="relative text-slate-500 hover:text-teal-600 transition-colors">
               <span className="material-symbols-outlined" data-icon="notifications">notifications</span>
             </button>
-            <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-6">
-              <div className="text-right">
-                <p className="text-xs font-bold text-on-background dark:text-slate-200">Dr. Julian Vance</p>
-                <p className="text-[10px] text-slate-500">Chief of Cardiology</p>
-              </div>
-              <img alt="Doctor Profile" className="w-10 h-10 rounded-full object-cover ring-2 ring-teal-100 dark:ring-teal-900" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvnEThOTf7Rfx1SSCNd3zNBSVAzbajexb_-GhdLgznfS9WMOc9zYf5D__moVAYJ2abIsnGxOFp-1eeoQPzd1-r3gEBrhqAzv2yasZa9z7-pY6h8i_7xSOImlAXXuW9T7NzgmXxqesB9BAnGoRUfAQxNkuyeRgrH605yJTYUvcXWASQQWw3DokvJOmW_1bdlGIyA7Pt62EjAKlSF_K7GOVCyPum7R8pdo1PtcaicoKkfVJoq7K1GI35TXFefL--S0CgqW3uM_V0Tn1F" />
-            </div>
+
           </div>
         </header>
 
@@ -230,9 +224,17 @@ function AuditHistory() {
                   
                   {/* Final Diagnosis add by physician */}
                   <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-4 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary text-sm">record_voice_over</span>
-                      Final Diagnosis added by Physician
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary text-sm">record_voice_over</span>
+                        Final Diagnosis added by Physician
+                      </div>
+                      {currentPatient.updatedBy && (
+                        <span className="text-[10px] font-bold bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 px-2 py-1 rounded flex items-center gap-1">
+                           <span className="material-symbols-outlined text-[12px]">person</span>
+                           {currentPatient.updatedBy}
+                        </span>
+                      )}
                     </h3>
                     <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl text-sm border border-slate-100 dark:border-slate-800 font-medium italic">
                       {currentPatient.searchQuery ? `"${currentPatient.searchQuery}"` : <span className="text-slate-400 not-italic">No search query recorded yet.</span>}

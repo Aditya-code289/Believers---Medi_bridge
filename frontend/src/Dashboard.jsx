@@ -15,8 +15,9 @@ function Dashboard() {
         return;
       }
 
+      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
       try {
-        const res = await fetch('http://localhost:9000/api/auth/get-me', {
+        const res = await fetch(`${API}/api/auth/get-me`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -26,7 +27,7 @@ function Dashboard() {
 
         if (res.status === 401) {
           // Token expired — try to refresh
-          const refreshRes = await fetch('http://localhost:9000/api/auth/refresh-token', {
+          const refreshRes = await fetch(`${API}/api/auth/refresh-token`, {
             method: 'GET',
             credentials: 'include',
           });
@@ -41,7 +42,7 @@ function Dashboard() {
           localStorage.setItem('accessToken', refreshData.accessToken);
 
           // Retry with new token
-          const retryRes = await fetch('http://localhost:9000/api/auth/get-me', {
+          const retryRes = await fetch(`${API}/api/auth/get-me`, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${refreshData.accessToken}` },
             credentials: 'include',
@@ -64,7 +65,8 @@ function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:9000/api/auth/logout', {
+      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+      await fetch(`${API}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });

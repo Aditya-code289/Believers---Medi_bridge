@@ -69,8 +69,13 @@ const patientSchema = new mongoose.Schema({
         default: null
     },
 
-    // What the doctor typed in the search bar
     searchQuery: {
+        type: String,
+        default: null
+    },
+
+    // Who last updated this record
+    updatedBy: {
         type: String,
         default: null
     }

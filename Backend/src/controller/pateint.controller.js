@@ -3,11 +3,11 @@ import auditModel from "../model/audit.schema.js";
 import puppeteer from "puppeteer";
 import userModel from "../model/user.schema.js";
 
-async function logAuditEvent(patientId, title, desc, color = 'teal', changes = null) {
+async function logAuditEvent(patientId, title, desc, color = 'teal', changes = null, author = 'System') {
     try {
         await auditModel.findOneAndUpdate(
             { patientId },
-            { $push: { events: { title, desc, color, changes } } },
+            { $push: { events: { title, desc, color, changes, author } } },
             { upsert: true, new: true }
         );
     } catch (e) {
@@ -30,7 +30,7 @@ export async function get_pateint(req, res) {
 export async function updateDiagnosis(req, res) {
     try {
         const { id } = req.params;
-        const { icdDiagnosis, traditionalMedicine, searchQuery } = req.body;
+        const { icdDiagnosis, traditionalMedicine, searchQuery, doctorName } = req.body;
 
         const updateFields = {};
 
@@ -45,6 +45,9 @@ export async function updateDiagnosis(req, res) {
         }
         if (req.body.aiSummary !== undefined) {
             updateFields.aiSummary = req.body.aiSummary;
+        }
+        if (doctorName !== undefined) {
+            updateFields.updatedBy = doctorName;
         }
 
         if (Object.keys(updateFields).length === 0) {
@@ -68,7 +71,7 @@ export async function updateDiagnosis(req, res) {
 
         if (icdDiagnosis && traditionalMedicine) {
             auditTitle = "Physician Finalized Record";
-            auditDesc = "Dr. Vance signed off on clinical notes and diagnostic mapping.";
+            auditDesc = "Clinical notes and diagnostic mapping signed off.";
             color = "teal";
         } else if (searchQuery) {
             auditTitle = "Physicist Started Search";
@@ -80,7 +83,7 @@ export async function updateDiagnosis(req, res) {
             color = "amber";
         }
 
-        await logAuditEvent(id, auditTitle, auditDesc, color);
+        await logAuditEvent(id, auditTitle, auditDesc, color, null, doctorName || 'System');
 
         return res.status(200).json({
             message: "Diagnosis updated successfully",

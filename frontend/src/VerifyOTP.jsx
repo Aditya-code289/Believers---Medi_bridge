@@ -69,7 +69,8 @@ function VerifyOTP() {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:9000/api/auth/verify-email', {
+      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+      const res = await fetch(`${API}/api/auth/verify-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otp: otpValue, email }),
