@@ -15,6 +15,10 @@ patientRouter.patch('/update-diagnosis/:id', patientController.updateDiagnosis);
 // /api/pateint/generate-summary/:id //post
 patientRouter.post('/generate-summary/:id', patientController.generateSummary);
 
+// Generate and Download PDF Report
+// /api/pateint/generate-pdf/:id //GET
+patientRouter.get('/generate-pdf/:id', patientController.generatePdf);
+
 
 
 
