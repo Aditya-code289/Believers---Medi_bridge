@@ -11,7 +11,19 @@ import auditRouter from './routes/audit.routes.js';
 
 const app = express() ;
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow static FRONTEND_URL, or any local development port, or requests with no origin (like Postman)
+        if (!origin || origin.startsWith('http://localhost:') || origin === process.env.FRONTEND_URL) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookieParser());

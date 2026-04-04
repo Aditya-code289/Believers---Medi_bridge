@@ -2,7 +2,11 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "build": "echo \"No build step required for Node backend - skipping\""
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
