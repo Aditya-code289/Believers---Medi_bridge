@@ -23,9 +23,11 @@ authRouter.post('/login',authController.login);
 //used to verify email 
 // /api/auth/verify-email 
 
-authRouter.get('/verify-email',authController.verifyEmail);
+authRouter.post('/verify-email',authController.verifyEmail);
 
-
+//logout route — clears the refreshToken cookie
+// /api/auth/logout  //post
+authRouter.post('/logout', authController.logout);
 
 
 

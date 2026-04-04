@@ -225,3 +225,16 @@ export async function verifyEmail(req,res) {
 
 
 }
+
+export async function logout(req, res) {
+    // Clear the refreshToken cookie by setting maxAge to 0
+    res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+    });
+
+    return res.status(200).json({
+        message: "Logged out successfully",
+    });
+}
