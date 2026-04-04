@@ -485,6 +485,7 @@ function PatientHistory() {
   // Layout states for drawers
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [patientsListOpen, setPatientsListOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const fetchPatients = async (soft = false) => {
     try {
@@ -504,6 +505,27 @@ function PatientHistory() {
   useEffect(() => {
     fetchPatients();
   }, []);
+
+  const handleDownloadPdf = async (id, username) => {
+    try {
+      setDownloadingPdf(true);
+      const res = await axios.get(`${API}/api/pateint/generate-pdf/${id}`, {
+        responseType: 'blob', // Important for handling binary file buffers
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `MediBridge_Report_${username.replace(/\\s+/g, '_')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      const msg = err?.response?.data?.message || err.message;
+      alert(`Failed to download PDF report: ${msg}`);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   const current = patients[selectedIndex] || null;
   const bp      = current ? bpTrend(current.bloodPressure) : {};
@@ -656,17 +678,32 @@ function PatientHistory() {
                   <div className="relative w-40 h-40 rounded-3xl ring-4 ring-background shadow-lg bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center">
                     <span className="text-5xl font-bold text-teal-600">{getInitials(current.username)}</span>
                   </div>
-                  <div className="relative flex-1 pb-2">
-                    <h2 className="text-4xl font-bold tracking-tight text-on-background leading-none mb-1">{current.username}</h2>
-                    <p className="text-slate-500 mb-4 font-medium">Patient ID: {current._id?.slice(-8).toUpperCase()}</p>
-                    <div className="flex gap-10">
-                      {[['Gender', current.gender], ['Age', `${current.age} yrs`], ['Height', `${current.height} cm`], ['Weight', `${current.weight} kg`], ['Blood', <span className="text-primary">{current.bloodGroup}</span>], ['Phone', current.phoneNumber]].map(([label, val]) => (
-                        <div key={label} className="space-y-1">
-                          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{label}</p>
-                          <p className="text-sm font-semibold text-on-background">{val}</p>
+                  <div className="relative flex-1 pb-2 flex justify-between items-end">
+                    <div>
+                        <h2 className="text-4xl font-bold tracking-tight text-on-background leading-none mb-1">{current.username}</h2>
+                        <p className="text-slate-500 mb-4 font-medium">Patient ID: {current._id?.slice(-8).toUpperCase()}</p>
+                        <div className="flex gap-10">
+                        {[['Gender', current.gender], ['Age', `${current.age} yrs`], ['Height', `${current.height} cm`], ['Weight', `${current.weight} kg`], ['Blood', <span className="text-primary">{current.bloodGroup}</span>], ['Phone', current.phoneNumber]].map(([label, val]) => (
+                            <div key={label} className="space-y-1">
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{label}</p>
+                            <p className="text-sm font-semibold text-on-background">{val}</p>
+                            </div>
+                        ))}
                         </div>
-                      ))}
                     </div>
+                    
+                    <button 
+                        onClick={() => handleDownloadPdf(current._id, current.username)}
+                        disabled={downloadingPdf}
+                        className="flex items-center gap-2 px-6 py-3 bg-teal-600 outline-none text-white rounded-full font-bold shadow-lg shadow-teal-600/30 hover:bg-teal-700 hover:shadow-xl hover:scale-105 active:scale-95 transition-all z-10 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                        {downloadingPdf ? (
+                           <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                        ) : (
+                           <span className="material-symbols-outlined">download</span>
+                        )}
+                        {downloadingPdf ? 'Generating PDF...' : 'Download Report'}
+                    </button>
                   </div>
                 </div>
 
