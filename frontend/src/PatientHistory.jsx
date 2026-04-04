@@ -168,7 +168,6 @@ function DiagnosisPanel({ patient, onSaved }) {
   }
 
   async function handleSaveMed() {
-    if (medSelected.length === 0) return;
     setSaving(true);
     try {
       await axios.patch(`${API}/api/pateint/update-diagnosis/${patient._id}`, { traditionalMedicine: medSelected, searchQuery: diseaseName });
@@ -377,7 +376,7 @@ function DiagnosisPanel({ patient, onSaved }) {
 
           {!medSaved && (
             <div className="flex justify-end mt-4">
-              <button onClick={handleSaveMed} disabled={saving || medSelected.length === 0}
+              <button onClick={handleSaveMed} disabled={saving}
                 className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-full text-sm font-bold shadow-lg shadow-amber-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">
                 {saving
                   ? <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
