@@ -1,7 +1,65 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 function SignIn() {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    mobileNumber: '',
+    gender: '',
+    hospitalName: '',
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!agreed) {
+      setError('You must agree to the Terms of Service and Privacy Policy.');
+      return;
+    }
+
+    const { username, email, password, mobileNumber, gender, hospitalName } = formData;
+    if (!username || !email || !password || !mobileNumber || !gender || !hospitalName) {
+      setError('All fields are required.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:9000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password, mobileNumber, gender, hospitalName }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.messgae || data.message || 'Registration failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      // Store email for OTP verification step
+      localStorage.setItem('pendingEmail', email);
+      navigate('/verify-otp');
+    } catch (err) {
+      setError('Network error. Please make sure the backend server is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="bg-background font-body text-on-surface antialiased min-h-screen flex flex-col">
       {/* TopNavBar */}
@@ -26,7 +84,7 @@ function SignIn() {
       <main className="relative flex-grow pt-24 pb-16 flex items-center justify-center overflow-hidden">
         {/* Background Decorative Element */}
         <div className="absolute inset-0 -z-10">
-          <img alt="High-key hospital corridor" className="w-full h-full object-cover opacity-10" data-alt="blurred high-key medical office interior with soft natural lighting and sterile white surfaces creating a professional calm atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKfOKe5fUESSBSR9y2oRL2dl3M2rXAdC0DHyPG5uuLUBMB552Qb2vouP-sh0d5rDsTk3UknV74tZ4m8DC5k9ie0l9J4L8rQEf2pk9S8tKPfRgR-k5oE8LNJwvHLVonzpZ1g0_eOgzaiLpmUa-kct4rzA_ttPkX3AHPEXEwhW7amjVtDQJoOJi0qSXLhPA6zmrLm4rIAQvfnRCPnVapPwOsbu2DSAalQi_5Jt61tPjO4UTwEWiytk4McvBmpnwRujexbVEWrSZ21wtE" />
+          <img alt="High-key hospital corridor" className="w-full h-full object-cover opacity-10" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKfOKe5fUESSBSR9y2oRL2dl3M2rXAdC0DHyPG5uuLUBMB552Qb2vouP-sh0d5rDsTk3UknV74tZ4m8DC5k9ie0l9J4L8rQEf2pk9S8tKPfRgR-k5oE8LNJwvHLVonzpZ1g0_eOgzaiLpmUa-kct4rzA_ttPkX3AHPEXEwhW7amjVtDQJoOJi0qSXLhPA6zmrLm4rIAQvfnRCPnVapPwOsbu2DSAalQi_5Jt61tPjO4UTwEWiytk4McvBmpnwRujexbVEWrSZ21wtE" />
         </div>
 
         {/* Registration Card Container */}
@@ -37,39 +95,80 @@ function SignIn() {
               <h1 className="text-3xl font-bold tracking-tight text-on-surface font-headline mb-3">Doctor Registration</h1>
               <p className="text-on-surface-variant max-w-md mx-auto">Join the Medi Bridge network to streamline your clinical documentation.</p>
             </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl text-sm text-red-600 dark:text-red-400 text-center font-medium">
+                {error}
+              </div>
+            )}
+
             {/* Form */}
-            <form className="space-y-6">
+            <form className="space-y-6" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Full Name */}
+                {/* Doctor Name (username) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Doctor Name</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">person</span>
-                    <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="Dr. John Doe" type="text" />
+                    <input
+                      id="reg-username"
+                      name="username"
+                      className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none"
+                      placeholder="Dr. John Doe"
+                      type="text"
+                      value={formData.username}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
+
                 {/* Phone Number */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Phone Number</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">call</span>
-                    <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="+1 (555) 000-0000" type="tel" />
+                    <input
+                      id="reg-mobile"
+                      name="mobileNumber"
+                      className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none"
+                      placeholder="+91 98765 43210"
+                      type="tel"
+                      value={formData.mobileNumber}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
+
                 {/* Email ID */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Email-ID</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">mail</span>
-                    <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="john.doe@hospital.com" type="email" />
+                    <input
+                      id="reg-email"
+                      name="email"
+                      className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none"
+                      placeholder="john.doe@hospital.com"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
+
                 {/* Gender */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Gender</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">wc</span>
-                    <select defaultValue="" className="w-full pl-12 pr-10 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none appearance-none">
+                    <select
+                      id="reg-gender"
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleChange}
+                      className="w-full pl-12 pr-10 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none appearance-none"
+                    >
                       <option disabled value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -79,12 +178,21 @@ function SignIn() {
                     <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
                   </div>
                 </div>
+
                 {/* Hospital Name */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Hospital Name</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">local_hospital</span>
-                    <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="General Medical Center" type="text" />
+                    <input
+                      id="reg-hospital"
+                      name="hospitalName"
+                      className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none"
+                      placeholder="General Medical Center"
+                      type="text"
+                      value={formData.hospitalName}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
 
@@ -93,15 +201,28 @@ function SignIn() {
                   <label className="text-xs font-semibold tracking-wider text-on-surface-variant uppercase ml-1">Create Password</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">lock</span>
-                    <input className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none" placeholder="••••••••" type="password" />
+                    <input
+                      id="reg-password"
+                      name="password"
+                      className="w-full pl-12 pr-4 py-3 bg-surface-container-lowest border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all text-sm outline-none"
+                      placeholder="••••••••"
+                      type="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
-
               </div>
 
               {/* Terms & Conditions */}
               <div className="flex items-center gap-3 ml-2 mt-4">
-                <input className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-outline-variant bg-surface-container-lowest" id="terms" type="checkbox" />
+                <input
+                  className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-outline-variant bg-surface-container-lowest"
+                  id="terms"
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                />
                 <label className="text-xs text-on-surface-variant" htmlFor="terms">
                   I agree to the <a className="text-primary font-semibold" href="#">Terms of Service</a> and <a className="text-primary font-semibold" href="#">Privacy Policy</a>.
                 </label>
@@ -109,9 +230,14 @@ function SignIn() {
 
               {/* CTA Section */}
               <div className="pt-6 space-y-4">
-                <Link to="/verify-otp" className="block text-center w-full py-4 rounded-xl teal-gradient text-on-primary font-bold text-base shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] transition-all duration-200">
-                  Register
-                </Link>
+                <button
+                  id="register-btn"
+                  type="submit"
+                  disabled={loading}
+                  className="block text-center w-full py-4 rounded-xl teal-gradient text-on-primary font-bold text-base shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Registering...' : 'Register'}
+                </button>
                 <div className="text-center">
                   <p className="text-sm text-on-surface-variant">
                     Already have an account?

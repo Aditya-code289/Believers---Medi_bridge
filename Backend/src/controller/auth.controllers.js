@@ -6,57 +6,57 @@ import { generateotp , getOtphtml } from '../utils/otp.js';
 import otpModel from '../model/otp.schema.js';
 
 
-export async function Register(req,res) {
+export async function Register(req, res) {
+    try {
+        const { username, email, password, mobileNumber, gender, hospitalName } = req.body;
 
-    const {username , email , password , mobileNumber , gender , hospitalName } = req.body ; 
+        if (!username || !email || !password || !mobileNumber || !gender || !hospitalName) {
+            return res.status(400).json({ message: "All fields are required" });
+        }
 
-    const isAlreadyRegistered = await  userModel.findOne({
-        $or:[
-            {username},{email}
-        ]
-    })
+        const isAlreadyRegistered = await userModel.findOne({
+            $or: [{ username }, { email }]
+        });
 
-    if(isAlreadyRegistered){
-        return res.status(409).json({
-            messgae:"Username or Email already exist" 
-        })
+        if (isAlreadyRegistered) {
+            return res.status(409).json({ message: "Username or Email already exist" });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await userModel.create({
+            username, email, password: hashedPassword, mobileNumber, gender, hospitalName
+        });
+
+        // Generate OTP
+        const otp = generateotp();
+        const html = getOtphtml(otp);
+        const otpHash = await bcrypt.hash(otp, 10);
+
+        await otpModel.create({ email, user: user.id, otpHash });
+
+        // Send email — fire and forget so email failure doesn't block registration
+        sendEmail(email, "OTP Verification", `Your OTP is ${otp}`, html).catch((err) => {
+            console.error("Email sending failed (non-fatal):", err.message);
+        });
+
+        console.log(`DEBUG: OTP for ${email} is ${otp}`);
+
+        return res.status(201).json({
+            username: user.username,
+            email: user.email,
+            mobileNumber: user.mobileNumber,
+            gender: user.gender,
+            hospitalName: user.hospitalName,
+            message: "User successfully registered. Please verify your email.",
+            verified: user.verified,
+            otpForTesting: otp, // visible in Network tab while OAuth is being fixed
+        });
+
+    } catch (error) {
+        console.error("Register error:", error.message);
+        return res.status(500).json({ message: "Registration failed: " + error.message });
     }
-
-    //now we create new user 
-    // but first we hash password 
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const  user = await userModel.create({
-        username , email , password:hashedPassword , mobileNumber , gender , hospitalName 
-    })
-
-    //all the otp work i will be doing here 
-    const otp = generateotp() ;
-    const html = getOtphtml(otp);
-
-    const otpHash = await bcrypt.hash(otp, 10) ; 
-    
-     await otpModel.create({
-        email,
-        user:user.id , 
-        otpHash ,
-     })
-
-     await sendEmail(email , "OTP Verification " , `your OTP is ${otp}` , html )
-
-
-    res.status(201).json({
-        username:user.username,
-        email:user.email,
-        mobileNumber:user.mobileNumber,
-        gender:user.gender,
-        hospitalName:user.hospitalName,
-        message:"user successfully registered but not verified",
-        verified : user.verified ,
-    })
-
-    
 }
 
 export async function get_me(req,res){
@@ -72,9 +72,15 @@ export async function get_me(req,res){
     }
 
     const user = await userModel.findById(decode.id)
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
     res.status(200).json({
-        username:user.username,
-        email:user.email,   
+        username: user.username,
+        email: user.email,
+        hospitalName: user.hospitalName,
+        gender: user.gender,
+        mobileNumber: user.mobileNumber,
     })
     
 
@@ -93,14 +99,12 @@ export async function login(req,res){
         })
     }
 
-    if(!user.verified){
+    if(user.verified !== "true"){
         return res.status(401).json({
-            message:"user not verified" ,
+            message:"user not verified. Please verify your email first.",
         })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
     const validPass = await bcrypt.compare(password, user.password);
 
     if(!validPass){
@@ -205,8 +209,8 @@ export async function verifyEmail(req,res) {
         }
 
         const user = await userModel.findByIdAndUpdate(otpDoc.user, {
-            verified: true,
-        }, { new: true }); // {new: true} returns the updated doc
+            verified: "true",
+        }, { returnDocument: 'after' }); // returns the updated doc
 
         await otpModel.deleteMany({ email });
 

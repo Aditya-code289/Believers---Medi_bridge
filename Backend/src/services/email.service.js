@@ -5,23 +5,23 @@ import nodemailer from 'nodemailer';
 
 
 const transporter = nodemailer.createTransport({
-    service:'gmail',
-    auth:{
-        type:'OAuth2',
-        user:process.env.google_user,
-        clientId:process.env.google_client_id,
-        clientSecret:process.env.google_client_secret,
-        refreshToken:process.env.google_refresh_token
-    }
+  service: 'gmail',
+  auth: {
+    type: 'OAuth2',
+    user: process.env.google_user,
+    clientId: process.env.google_client_id,
+    clientSecret: process.env.google_client_secret,
+    refreshToken: process.env.google_refresh_token
+  }
 })
 
 
-transporter.verify((error,success)=>{
-    if(error){
-        console.error('error connecting to email service',error);
-    }else{
-        console.log('email service is ready to send message');
-    }
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('error connecting to email service', error);
+  } else {
+    console.log('email service is ready to send message');
+  }
 })
 
 // Function to send email
@@ -45,4 +45,4 @@ export const sendEmail = async (to, subject, text, html) => {
 
 
 
-export default transporter ;
+export default transporter;

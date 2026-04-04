@@ -1,41 +1,96 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 function VerifyOTP() {
-  const [otp, setOtp] = useState(new Array(6).fill(""));
+  const [otp, setOtp] = useState(new Array(6).fill(''));
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
 
-  const handleChange = (element, index) => {
-    if (isNaN(element.value)) return false;
+  // Read email saved during registration
+  const email = localStorage.getItem('pendingEmail') || '';
 
-    setOtp([...otp.map((d, idx) => (idx === index ? element.value : d))]);
+  useEffect(() => {
+    // Auto-focus first input
+    if (inputRefs.current[0]) {
+      inputRefs.current[0].focus();
+    }
+  }, []);
+
+  const handleChange = (element, index) => {
+    if (isNaN(element.value)) return;
+
+    const newOtp = [...otp.map((d, idx) => (idx === index ? element.value : d))];
+    setOtp(newOtp);
 
     // Focus next input
-    if (element.nextSibling && element.value !== "") {
-      element.nextSibling.focus();
+    if (element.value !== '' && index < 5) {
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleKeyDown = (e, index) => {
-    if (e.key === "Backspace") {
-      if (otp[index] === "" && e.target.previousSibling) {
-        e.target.previousSibling.focus();
+    if (e.key === 'Backspace') {
+      if (otp[index] === '' && index > 0) {
+        inputRefs.current[index - 1]?.focus();
       }
     }
   };
 
-  const handleReset = () => {
-    setOtp(new Array(6).fill(""));
-    if (inputRefs.current[0]) {
-      inputRefs.current[0].focus();
-    }
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const paste = e.clipboardData.getData('text').trim().slice(0, 6);
+    if (!/^\d+$/.test(paste)) return;
+    const newOtp = [...otp];
+    paste.split('').forEach((char, i) => {
+      newOtp[i] = char;
+    });
+    setOtp(newOtp);
+    inputRefs.current[Math.min(paste.length, 5)]?.focus();
   };
 
-  const handleVerify = (e) => {
+  const handleVerify = async (e) => {
     e.preventDefault();
-    // In a real app, verify OTP with backend here
-    navigate('/login');
+    setError('');
+    setSuccess('');
+
+    const otpValue = otp.join('');
+    if (otpValue.length < 6) {
+      setError('Please enter the complete 6-digit OTP.');
+      return;
+    }
+
+    if (!email) {
+      setError('Session expired. Please register again.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:9000/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: otpValue, email }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || 'OTP verification failed.');
+        setLoading(false);
+        return;
+      }
+
+      setSuccess('Email verified successfully! Redirecting to login...');
+      localStorage.removeItem('pendingEmail');
+      setTimeout(() => navigate('/login'), 1500);
+    } catch (err) {
+      setError('Network error. Please make sure the backend server is running.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,7 +117,7 @@ function VerifyOTP() {
       <main className="relative flex-grow pt-24 pb-16 flex items-center justify-center overflow-hidden">
         {/* Background Decorative Element */}
         <div className="absolute inset-0 -z-10">
-          <img alt="High-key hospital corridor" className="w-full h-full object-cover opacity-10" data-alt="blurred high-key medical office interior with soft natural lighting and sterile white surfaces creating a professional calm atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKfOKe5fUESSBSR9y2oRL2dl3M2rXAdC0DHyPG5uuLUBMB552Qb2vouP-sh0d5rDsTk3UknV74tZ4m8DC5k9ie0l9J4L8rQEf2pk9S8tKPfRgR-k5oE8LNJwvHLVonzpZ1g0_eOgzaiLpmUa-kct4rzA_ttPkX3AHPEXEwhW7amjVtDQJoOJi0qSXLhPA6zmrLm4rIAQvfnRCPnVapPwOsbu2DSAalQi_5Jt61tPjO4UTwEWiytk4McvBmpnwRujexbVEWrSZ21wtE" />
+          <img alt="High-key hospital corridor" className="w-full h-full object-cover opacity-10" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKfOKe5fUESSBSR9y2oRL2dl3M2rXAdC0DHyPG5uuLUBMB552Qb2vouP-sh0d5rDsTk3UknV74tZ4m8DC5k9ie0l9J4L8rQEf2pk9S8tKPfRgR-k5oE8LNJwvHLVonzpZ1g0_eOgzaiLpmUa-kct4rzA_ttPkX3AHPEXEwhW7amjVtDQJoOJi0qSXLhPA6zmrLm4rIAQvfnRCPnVapPwOsbu2DSAalQi_5Jt61tPjO4UTwEWiytk4McvBmpnwRujexbVEWrSZ21wtE" />
         </div>
 
         {/* OTP Card Container */}
@@ -74,35 +129,70 @@ function VerifyOTP() {
                 <span className="material-symbols-outlined text-3xl text-teal-600 dark:text-teal-400">lock_outline</span>
               </div>
               <h1 className="text-3xl font-bold tracking-tight text-on-surface font-headline mb-3">Verification</h1>
-              <p className="text-on-surface-variant max-w-sm mx-auto text-sm">Enter the 6-digit code sent to your registered email address to verify your account.</p>
+              <p className="text-on-surface-variant max-w-sm mx-auto text-sm">
+                Enter the 6-digit code sent to{' '}
+                <span className="font-semibold text-teal-600">{email || 'your email'}</span>
+              </p>
             </div>
+
+            {/* Error / Success Messages */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl text-sm text-red-600 dark:text-red-400 text-center font-medium">
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl text-sm text-green-600 dark:text-green-400 text-center font-medium">
+                {success}
+              </div>
+            )}
 
             {/* Form */}
             <form className="space-y-8" onSubmit={handleVerify}>
               {/* OTP Input Group */}
-              <div className="flex justify-center gap-2 sm:gap-4">
-                {otp.map((data, index) => {
-                  return (
-                    <input
-                      className="w-10 h-12 sm:w-14 sm:h-16 bg-surface-container-lowest border-none rounded-xl focus:ring-2 focus:ring-teal-500/50 transition-all outline-none text-center text-xl sm:text-2xl font-bold text-on-surface shadow-inner"
-                      type="text"
-                      name="otp"
-                      maxLength="1"
-                      key={index}
-                      value={data}
-                      onChange={e => handleChange(e.target, index)}
-                      onKeyDown={e => handleKeyDown(e, index)}
-                      ref={el => inputRefs.current[index] = el}
-                    />
-                  );
-                })}
+              <div className="flex justify-center gap-2 sm:gap-4" onPaste={handlePaste}>
+                {otp.map((data, index) => (
+                  <input
+                    key={index}
+                    id={`otp-input-${index}`}
+                    className="w-10 h-12 sm:w-14 sm:h-16 bg-surface-container-lowest border-none rounded-xl focus:ring-2 focus:ring-teal-500/50 transition-all outline-none text-center text-xl sm:text-2xl font-bold text-on-surface shadow-inner"
+                    type="text"
+                    inputMode="numeric"
+                    name="otp"
+                    maxLength="1"
+                    value={data}
+                    onChange={(e) => handleChange(e.target, index)}
+                    onKeyDown={(e) => handleKeyDown(e, index)}
+                    ref={(el) => (inputRefs.current[index] = el)}
+                  />
+                ))}
               </div>
 
               {/* Action Buttons */}
               <div className="pt-2 space-y-4">
-                <button type="submit" className="block text-center w-full py-4 rounded-xl teal-gradient text-on-primary font-bold text-base shadow-lg shadow-teal-600/20 hover:shadow-xl hover:shadow-teal-600/30 active:scale-[0.98] transition-all duration-200">
-                  Verify OTP
+                <button
+                  id="verify-otp-btn"
+                  type="submit"
+                  disabled={loading}
+                  className="block text-center w-full py-4 rounded-xl teal-gradient text-on-primary font-bold text-base shadow-lg shadow-teal-600/20 hover:shadow-xl hover:shadow-teal-600/30 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Verifying...' : 'Verify OTP'}
                 </button>
+                <div className="text-center">
+                  <p className="text-sm text-on-surface-variant">
+                    Didn't receive the code?{' '}
+                    <button
+                      type="button"
+                      className="text-primary font-bold hover:underline"
+                      onClick={() => {
+                        localStorage.removeItem('pendingEmail');
+                        navigate('/signup');
+                      }}
+                    >
+                      Go back to Register
+                    </button>
+                  </p>
+                </div>
               </div>
             </form>
           </div>
