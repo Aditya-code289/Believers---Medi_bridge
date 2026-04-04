@@ -63,9 +63,8 @@ function App() {
               <div className="w-12 h-12 rounded-full bg-secondary-fixed flex items-center justify-center mb-6">
                 <span className="material-symbols-outlined text-primary" data-icon="clinical_notes">clinical_notes</span>
               </div>
-              <h3 className="text-lg font-bold text-on-surface mb-2 tracking-tight">AI Transcription</h3>
-              <p className="text-sm text-on-surface-variant leading-relaxed">Neural processing of complex medical dictations
-                with 99.9% semantic accuracy.</p>
+              <h3 className="text-lg font-bold text-on-surface mb-2 tracking-tight">AI Clinical Assessment</h3>
+              <p className="text-sm text-on-surface-variant leading-relaxed">AI-generated comprehensive summary of the patient's clinical report.</p>
             </div>
             <div
               className="glass-panel p-8 rounded-full border border-white/20 shadow-sm transition-transform hover:scale-[1.02]">
