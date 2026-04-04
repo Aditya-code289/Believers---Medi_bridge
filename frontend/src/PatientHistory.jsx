@@ -483,6 +483,10 @@ function PatientHistory() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
 
+  // Layout states for drawers
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [patientsListOpen, setPatientsListOpen] = useState(false);
+
   const fetchPatients = async (soft = false) => {
     try {
       if (!soft) setLoading(true);
@@ -510,8 +514,8 @@ function PatientHistory() {
   return (
     <div className="bg-background text-on-background antialiased overflow-hidden min-h-screen">
 
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-64 z-50 bg-slate-50 border-r border-slate-200/50 flex flex-col p-4 font-['Inter'] text-sm tracking-wide">
+      {/* Sidebar Overlay (optional mobile bg overlay can be added here) */}
+      <aside className={`fixed left-0 top-0 h-full w-64 z-50 bg-slate-50 border-r border-slate-200/50 flex flex-col p-4 font-['Inter'] text-sm tracking-wide transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-10 px-4">
           <h1 className="text-lg font-bold text-teal-700 tracking-tight">Medi Bridge</h1>
           <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-semibold">Clinical Portal</p>
@@ -537,11 +541,23 @@ function PatientHistory() {
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="ml-64 min-h-screen flex flex-col relative">
+      {/* Main Content Area */}
+      <main className={`min-h-screen flex flex-col relative transition-all duration-300 ease-in-out ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
+        
         {/* TopBar */}
-        <header className="fixed top-0 right-0 left-64 z-40 h-16 bg-white/80 backdrop-blur-md flex justify-between items-center px-8 shadow-[0_20px_40px_rgba(25,28,30,0.06)]">
+        <header className={`fixed top-0 right-0 z-40 h-16 bg-white/80 backdrop-blur-md flex justify-between items-center px-8 shadow-[0_20px_40px_rgba(25,28,30,0.06)] transition-all duration-300 ease-in-out ${sidebarOpen ? 'left-64' : 'left-0'}`}>
           <div className="flex items-center gap-4">
+            
+            {/* Hamburger Menus */}
+            <div className="flex gap-1.5 -ml-4 mr-2">
+                <button title="Toggle Sidebar" onClick={() => setSidebarOpen(!sidebarOpen)} className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${sidebarOpen ? 'bg-teal-50 text-teal-600' : 'text-slate-500 hover:bg-slate-100'}`}>
+                    <span className="material-symbols-outlined text-xl">menu</span>
+                </button>
+                <button title="Toggle Patient List" onClick={() => setPatientsListOpen(!patientsListOpen)} className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${patientsListOpen ? 'bg-teal-50 text-teal-600' : 'text-slate-500 hover:bg-slate-100'}`}>
+                    <span className="material-symbols-outlined text-xl">group</span>
+                </button>
+            </div>
+
             <div className="bg-surface-container-low px-4 py-2 rounded-full flex items-center gap-3">
               <span className="material-symbols-outlined text-slate-400 text-lg">search</span>
               <input className="bg-transparent border-none focus:ring-0 text-sm w-64 placeholder:text-slate-400" placeholder="Search records..." type="text" />
@@ -563,8 +579,8 @@ function PatientHistory() {
 
         <div className="pt-16 flex h-[calc(100vh-64px)] overflow-hidden">
 
-          {/* Patient list sidebar */}
-          <section className="w-80 bg-surface-container-low flex flex-col overflow-hidden">
+          {/* Patient list sidebar (Toggleable) */}
+          <section className={`bg-surface-container-low flex flex-col overflow-hidden transition-all duration-300 ease-in-out border-slate-200 ${patientsListOpen ? 'w-80 border-r' : 'w-0 border-r-0'}`}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold tracking-tight text-on-surface">Active Patients</h2>
