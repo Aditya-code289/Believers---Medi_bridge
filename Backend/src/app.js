@@ -11,16 +11,22 @@ import auditRouter from './routes/audit.routes.js';
 
 const app = express() ;
 
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : [];
+
 const corsOptions = {
     origin: function (origin, callback) {
-        // Allow static FRONTEND_URL, or any local development port, or requests with no origin (like Postman)
-        if (!origin || origin.startsWith('http://localhost:') || origin === process.env.FRONTEND_URL) {
+        // Allow requests with no origin (like Postman or mobile apps)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 app.use(cors(corsOptions));
