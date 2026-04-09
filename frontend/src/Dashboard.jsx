@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API } from './config';
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ function Dashboard() {
         return;
       }
 
-      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+
       try {
         const res = await fetch(`${API}/api/auth/get-me`, {
           method: 'GET',
@@ -65,7 +66,7 @@ function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+
       await fetch(`${API}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',

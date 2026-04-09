@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API } from './config';
 
 function SignIn() {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ function SignIn() {
 
     setLoading(true);
     try {
-      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+
       const res = await fetch(`${API}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

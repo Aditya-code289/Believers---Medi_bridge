@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API } from './config';
 
 function VerifyOTP() {
   const [otp, setOtp] = useState(new Array(6).fill(''));
@@ -69,7 +70,7 @@ function VerifyOTP() {
 
     setLoading(true);
     try {
-      const API = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+
       const res = await fetch(`${API}/api/auth/verify-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
